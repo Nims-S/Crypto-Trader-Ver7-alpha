@@ -14,7 +14,14 @@ from strategy import compute_indicators, generate_signal
 exchange = ccxt.binance({"enableRateLimit": True, "timeout": 20000})
 
 
-def _to_ms(value: str | None) -> int | None:
+# ===================== CONFIG =====================
+TAKER_FEE_BPS = 6.0
+MAKER_FEE_BPS = 2.0
+SLIPPAGE_BPS = 3.0
+SLIPPAGE_ATR_MULT = 0.1
+
+
+def _to_ms(value):
     if not value:
         return None
     ts = pd.Timestamp(value)
@@ -25,32 +32,21 @@ def _to_ms(value: str | None) -> int | None:
     return int(ts.timestamp() * 1000)
 
 
-def _sig(signal, key: str, default=None):
+def _sig(signal, key, default=None):
     if signal is None:
         return default
-    if isinstance(signal, dict):
-        return signal.get(key, default)
     return getattr(signal, key, default)
 
 
-def _get_entry_stop_tp(signal, entry: float, side: str) -> tuple[float, float]:
-    side = (side or "").upper()
-    sl = _sig(signal, "sl")
-    tp = _sig(signal, "tp")
-    stop_loss_pct = _sig(signal, "stop_loss_pct")
-    take_profit_pct = _sig(signal, "take_profit_pct")
-
-    if sl is None and stop_loss_pct is not None:
-        sl = entry * (1 - float(stop_loss_pct)) if side == "LONG" else entry * (1 + float(stop_loss_pct))
-    if tp is None and take_profit_pct is not None:
-        tp = entry * (1 + float(take_profit_pct)) if side == "LONG" else entry * (1 - float(take_profit_pct))
-
-    if sl is None or tp is None:
-        raise ValueError("signal must include either absolute sl/tp or pct fields")
-    return float(sl), float(tp)
+def _slippage(price, atr_pct, side):
+    slip = (SLIPPAGE_BPS / 10000) + (atr_pct * SLIPPAGE_ATR_MULT)
+    if side == "LONG":
+        return price * (1 + slip)
+    else:
+        return price * (1 - slip)
 
 
-def fetch_ohlcv_full(symbol: str, timeframe: str, since_ms: int | None = None, until_ms: int | None = None) -> pd.DataFrame:
+def fetch_ohlcv_full(symbol, timeframe, since_ms=None, until_ms=None):
     rows = []
     since = since_ms
     while True:
@@ -61,129 +57,92 @@ def fetch_ohlcv_full(symbol: str, timeframe: str, since_ms: int | None = None, u
         since = chunk[-1][0] + 1
         if len(chunk) < 1000:
             break
-        if until_ms is not None and since >= until_ms:
+        if until_ms and since >= until_ms:
             break
         time.sleep(exchange.rateLimit / 1000)
+
     df = pd.DataFrame(rows, columns=["timestamp", "open", "high", "low", "close", "volume"])
-    if df.empty:
-        return df
     df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms", utc=True)
-    if since_ms is not None:
-        df = df[df["timestamp"] >= pd.to_datetime(since_ms, unit="ms", utc=True)]
-    if until_ms is not None:
-        df = df[df["timestamp"] <= pd.to_datetime(until_ms, unit="ms", utc=True)]
+
     return compute_indicators(df.reset_index(drop=True))
 
 
-def run_smoke_backtest(symbol: str, timeframe: str, start: str | None = None, end: str | None = None, limit: int = 1000):
-    since_ms = _to_ms(start)
-    until_ms = _to_ms(end)
-    if since_ms is None:
-        raw = exchange.fetch_ohlcv(symbol, timeframe=timeframe, limit=limit)
-        df = pd.DataFrame(raw, columns=["timestamp", "open", "high", "low", "close", "volume"])
-        if df.empty:
-            raise RuntimeError("no market data returned")
-        df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms", utc=True)
-        df = compute_indicators(df)
-    else:
-        df = fetch_ohlcv_full(symbol, timeframe, since_ms, until_ms)
+def run_backtest(symbol, timeframe, start=None, end=None):
+    df = fetch_ohlcv_full(symbol, timeframe, _to_ms(start), _to_ms(end))
 
-    if df.empty or len(df) < 80:
-        raise RuntimeError("not enough data for a smoke backtest")
-
-    capital = 10_000.0
+    capital = 10000
     cash = capital
-    position: Optional[dict] = None
+    position = None
     trades = []
-    equity_curve = []
+    equity = []
 
-    for i in range(60, len(df) - 1):
-        window = df.iloc[: i + 1].copy().reset_index(drop=True)
+    cooldown_until = -1
+
+    for i in range(80, len(df) - 1):
+        window = df.iloc[: i + 1]
         bar = df.iloc[i + 1]
+        entry_idx = i + 1
 
-        if position is not None:
-            if position["side"] == "LONG":
-                stop_hit = bar["low"] <= position["sl"]
-                tp_hit = bar["high"] >= position["tp"]
-            else:
-                stop_hit = bar["high"] >= position["sl"]
-                tp_hit = bar["low"] <= position["tp"]
+        # exit
+        if position:
+            hit_sl = bar["low"] <= position["sl"]
+            hit_tp = bar["high"] >= position["tp"]
 
-            if stop_hit:
-                exit_price = position["sl"]
-                pnl = (exit_price - position["entry"]) * position["qty"] if position["side"] == "LONG" else (position["entry"] - exit_price) * position["qty"]
+            if hit_sl or hit_tp:
+                exit_price = position["sl"] if hit_sl else position["tp"]
+                exit_price = _slippage(exit_price, bar["atr_pct"], position["side"])
+
+                fee = exit_price * position["qty"] * (MAKER_FEE_BPS / 10000)
+                pnl = (exit_price - position["entry"]) * position["qty"] - fee
+
                 cash += position["qty"] * exit_price
-                trades.append({"entry": position["entry"], "exit": exit_price, "pnl": pnl, "reason": "sl"})
-                position = None
-            elif tp_hit:
-                exit_price = position["tp"]
-                pnl = (exit_price - position["entry"]) * position["qty"] if position["side"] == "LONG" else (position["entry"] - exit_price) * position["qty"]
-                cash += position["qty"] * exit_price
-                trades.append({"entry": position["entry"], "exit": exit_price, "pnl": pnl, "reason": "tp"})
+                trades.append(pnl)
+
+                cooldown_until = entry_idx + position.get("cooldown", 0)
                 position = None
 
+        # entry
         signal = generate_signal(window)
-        side = str(_sig(signal, "side", "")).upper()
-        strategy = _sig(signal, "strategy")
 
-        if position is None and signal and side in {"LONG", "SHORT"} and strategy != "no_trade":
-            entry = float(bar["open"])
-            qty = (cash * 0.33) / entry
-            sl, tp = _get_entry_stop_tp(signal, entry, side)
-            position = {"entry": entry, "qty": qty, "sl": sl, "tp": tp, "side": side}
-            cash -= qty * entry
+        if position is None and signal and entry_idx >= cooldown_until:
+            side = _sig(signal, "side")
+            entry_price = _slippage(bar["open"], bar["atr_pct"], side)
 
-        equity_curve.append(cash + (position["qty"] * bar["close"] if position else 0.0))
+            qty = (cash * 0.3) / entry_price
+            fee = entry_price * qty * (TAKER_FEE_BPS / 10000)
 
-    if position is not None:
-        last = df.iloc[-1]
-        exit_price = float(last["close"])
-        pnl = (exit_price - position["entry"]) * position["qty"] if position["side"] == "LONG" else (position["entry"] - exit_price) * position["qty"]
-        cash += position["qty"] * exit_price
-        trades.append({"entry": position["entry"], "exit": exit_price, "pnl": pnl, "reason": "eod"})
+            sl = entry_price * (1 - _sig(signal, "stop_loss_pct"))
+            tp = entry_price * (1 + _sig(signal, "take_profit_pct"))
 
-    pnls = np.array([t["pnl"] for t in trades], dtype=float) if trades else np.array([], dtype=float)
-    wins = int((pnls > 0).sum())
-    losses = int((pnls <= 0).sum())
-    gross_profit = float(pnls[pnls > 0].sum()) if len(pnls) else 0.0
-    gross_loss = float(abs(pnls[pnls < 0].sum())) if len(pnls) else 0.0
-    pf = gross_profit / gross_loss if gross_loss > 0 else float("inf")
-    peak = np.maximum.accumulate(np.array(equity_curve, dtype=float)) if equity_curve else np.array([capital])
-    dd = (np.array(equity_curve, dtype=float) - peak) / np.where(peak == 0, 1, peak) if equity_curve else np.array([0.0])
+            position = {
+                "entry": entry_price,
+                "qty": qty,
+                "sl": sl,
+                "tp": tp,
+                "side": side,
+                "cooldown": _sig(signal, "cooldown_bars", 0),
+            }
+
+            cash -= qty * entry_price + fee
+
+        equity.append(cash + (position["qty"] * bar["close"] if position else 0))
 
     return {
-        "symbol": symbol,
-        "timeframe": timeframe,
-        "bars": len(df),
         "trades": len(trades),
-        "wins": wins,
-        "losses": losses,
-        "win_rate": wins / len(trades) if trades else 0.0,
-        "gross_profit": gross_profit,
-        "gross_loss": gross_loss,
-        "profit_factor": pf,
+        "profit_factor": sum([t for t in trades if t > 0]) / abs(sum([t for t in trades if t < 0]) or 1),
         "final_equity": cash,
         "return_pct": (cash / capital - 1) * 100,
-        "max_drawdown_pct": float(dd.min() * 100),
-        "trades_detail": trades,
+        "max_drawdown_pct": float((np.array(equity) - np.maximum.accumulate(equity)).min() / capital * 100),
     }
 
 
-def main():
-    ap = argparse.ArgumentParser(description="V7 smoke backtest using the live strict trend signal.")
+if __name__ == "__main__":
+    ap = argparse.ArgumentParser()
     ap.add_argument("--symbol", default="BTC/USDT")
     ap.add_argument("--timeframe", default="1h")
-    ap.add_argument("--start", default=None)
-    ap.add_argument("--end", default=None)
-    ap.add_argument("--limit", type=int, default=1000)
-    ap.add_argument("--save", action="store_true")
+    ap.add_argument("--start")
+    ap.add_argument("--end")
     args = ap.parse_args()
-    result = run_smoke_backtest(args.symbol, args.timeframe, start=args.start, end=args.end, limit=args.limit)
-    print(json.dumps(result, indent=2, default=str))
-    if args.save:
-        with open("backtest_result_v7.json", "w", encoding="utf-8") as f:
-            json.dump(result, f, indent=2, default=str)
 
-
-if __name__ == "__main__":
-    main()
+    result = run_backtest(args.symbol, args.timeframe, args.start, args.end)
+    print(json.dumps(result, indent=2))
