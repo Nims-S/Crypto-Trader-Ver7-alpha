@@ -153,18 +153,15 @@ def generate_signal(symbol: str, df: pd.DataFrame):
     )
 
     reclaim_candle = (
-        row["close"] > row["open"]
-        and row["close"] > row["ema20"]
-        and row["close"] > prev["high"]
-        and row["close"] >= row["high"] - (row["high"] - row["low"]) * 0.35
+        last["close"] > last["ema20"] and
+        last["close"] > prev["high"]
     )
 
     momentum_ok = (
-        48 <= row["rsi"] <= 64
-        and row["vol_ratio"] >= 1.20
-        and 0.007 <= row["atr_pct"] <= 0.022
-        and 0.025 <= row["bb_width"] <= 0.085
-        and row["close"] <= row["ema20"] * 1.012
+        45 <= rsi <= 68 and
+        vol_ratio >= 1.05 and
+        0.004 <= atr_pct <= 0.03 and
+        0.02 <= bb_width <= 0.12
     )
 
     if not (recent_pullback and reclaim_candle and momentum_ok):
