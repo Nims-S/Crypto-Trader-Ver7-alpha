@@ -35,7 +35,7 @@ from risk import (
     risk_gate,
 )
 from state import get_controls, get_state, update_asset
-from strategy import compute_indicators, generate_signal
+from strategy import compute_indicators, generate_signal, StrategyState
 
 exchange = ccxt.binance({"enableRateLimit": True, "timeout": 15000})
 try:
@@ -43,7 +43,6 @@ try:
 except Exception as e:
     print(f"[EXCHANGE WARN] load_markets failed: {e}", flush=True)
 
-# Fetch OHLCV once per minute per symbol; only act on the last CLOSED candle.
 _candle_cache: dict[str, tuple[float, pd.DataFrame]] = {}
 CANDLE_CACHE_TTL = 60
 
@@ -127,11 +126,6 @@ def build_position_state(position):
 
 
 def _latest_closed_slice(df: pd.DataFrame) -> pd.DataFrame:
-    """Use only closed candles for signal generation.
-
-    Binance OHLCV can include the currently forming candle as the last row.
-    Dropping the last bar prevents repeated entry signals on an unclosed candle.
-    """
     if df is None or df.empty:
         return pd.DataFrame()
     if len(df) < 3:
@@ -150,6 +144,7 @@ def run_bot():
     print("[BOT] LOOP STARTED (strict closed-candle mode)", flush=True)
     last_trade_time: dict[str, float] = {}
     last_signal_candle: dict[str, pd.Timestamp] = {}
+    states = {s: StrategyState() for s in SYMBOLS}
 
     while True:
         timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
@@ -190,106 +185,53 @@ def run_bot():
 
                 position = load_position(cur, symbol)
 
-                # Manage open positions first, every loop.
                 if position:
                     try:
                         df_manage = fetch_historical_data(symbol)
-                        current_atr_pct = None
+                        current_atr = None
                         if not df_manage.empty:
                             closed_manage = _latest_closed_slice(df_manage)
-                            if not closed_manage.empty and "atr_pct" in closed_manage.columns:
-                                current_atr_pct = _to_float(closed_manage.iloc[-1].get("atr_pct"))
-                        manage_position(cur, position, price, current_atr_pct)
+                            if not closed_manage.empty and "atr" in closed_manage.columns:
+                                current_atr = _to_float(closed_manage.iloc[-1].get("atr"))
+                        manage_position(cur, position, price, current_atr)
                         position = load_position(cur, symbol)
                     except Exception as e:
                         print(f"[MANAGE ERROR] {symbol}: {e}", flush=True)
 
-                # Hard kill-switches.
                 symbol_ctrl = controls.get(symbol, {})
                 blocked = (not global_enabled) or (not symbol_ctrl.get("enabled", True))
                 if blocked:
-                    update_asset(
-                        symbol=symbol,
-                        regime="paused",
-                        strategy="kill_switch",
-                        signal=None,
-                        position=build_position_state(position),
-                    )
+                    update_asset(symbol=symbol, regime="paused", strategy="kill_switch", signal=None, position=build_position_state(position))
                     continue
 
-                # No new entries if symbol is cooling down.
                 if get_symbol_cooldown(cur, symbol):
-                    update_asset(
-                        symbol=symbol,
-                        regime="paused",
-                        strategy="symbol_cooldown",
-                        signal=None,
-                        position=build_position_state(position),
-                    )
+                    update_asset(symbol=symbol, regime="paused", strategy="symbol_cooldown", signal=None, position=build_position_state(position))
                     continue
 
                 df = fetch_historical_data(symbol)
                 if df.empty:
-                    update_asset(
-                        symbol=symbol,
-                        regime="unknown",
-                        strategy="data_unavailable",
-                        signal=None,
-                        position=build_position_state(position),
-                    )
+                    update_asset(symbol=symbol, regime="unknown", strategy="data_unavailable", signal=None, position=build_position_state(position))
                     continue
 
                 closed_df = _latest_closed_slice(df)
                 if closed_df.empty:
-                    update_asset(
-                        symbol=symbol,
-                        regime="unknown",
-                        strategy="waiting_for_close",
-                        signal=None,
-                        position=build_position_state(position),
-                    )
+                    update_asset(symbol=symbol, regime="unknown", strategy="waiting_for_close", signal=None, position=build_position_state(position))
                     continue
 
                 candle_ts = closed_df.iloc[-1]["timestamp"]
                 if last_signal_candle.get(symbol) == candle_ts:
-                    # Avoid re-firing the same entry on the same closed candle.
-                    update_asset(
-                        symbol=symbol,
-                        regime=position["regime"] if position else "watching",
-                        strategy=position["strategy"] if position else "waiting_for_new_candle",
-                        signal=None,
-                        position=build_position_state(position),
-                    )
+                    update_asset(symbol=symbol, regime=position["regime"] if position else "watching", strategy=position["strategy"] if position else "waiting_for_new_candle", signal=None, position=build_position_state(position))
                     continue
 
-                signal = generate_signal(symbol, closed_df)
+                signal = generate_signal(closed_df, state=states[symbol], symbol=symbol)
                 last_signal_candle[symbol] = candle_ts
 
                 if signal and signal.strategy != "no_trade":
-                    print(
-                        f"[SIGNAL] {symbol} | {signal.strategy} | regime={signal.regime} | conf={signal.confidence:.2f}",
-                        flush=True,
-                    )
+                    print(f"[SIGNAL] {symbol} | {signal.strategy} | regime={signal.regime} | conf={signal.confidence:.2f}", flush=True)
 
-                update_asset(
-                    symbol=symbol,
-                    regime=signal.regime if signal else "unknown",
-                    strategy=signal.strategy if signal else "none",
-                    signal={
-                        "side": signal.side if signal else None,
-                        "confidence": getattr(signal, "confidence", None),
-                    }
-                    if signal
-                    else None,
-                    position=build_position_state(position),
-                )
+                update_asset(symbol=symbol, regime=signal.regime if signal else "unknown", strategy=signal.strategy if signal else "none", signal={"side": signal.side if signal else None, "confidence": getattr(signal, "confidence", None)} if signal else None, position=build_position_state(position))
 
-                if (
-                    signal
-                    and signal.side == "LONG"
-                    and signal.strategy != "no_trade"
-                    and not position
-                ):
+                if signal and signal.side == "LONG" and signal.strategy != "no_trade" and not position:
                     cur.execute("SELECT COUNT(*) FROM positions")
                     active_trades = int(cur.fetchone()[0] or 0)
                     if active_trades >= MAX_POSITIONS:
@@ -300,37 +242,10 @@ def run_bot():
                         continue
 
                     strategy_mult = get_strategy_multiplier(cur, signal.strategy, signal.regime)
-                    size, deployed = calculate_position(
-                        symbol=symbol,
-                        price=price,
-                        total_cap=total_cap,
-                        stop_loss_pct=signal.stop_loss_pct,
-                        confidence=signal.confidence,
-                        regime_multiplier=strategy_mult,
-                        size_multiplier=float(getattr(signal, "size_multiplier", 1.0) or 1.0),
-                    )
+                    size, deployed = calculate_position(symbol=symbol, price=price, total_cap=total_cap, stop_loss_pct=signal.stop_loss_pct, confidence=signal.confidence, regime_multiplier=strategy_mult, size_multiplier=float(getattr(signal, "size_multiplier", 1.0) or 1.0))
 
                     if size and size > 0:
-                        open_position(
-                            cur=cur,
-                            symbol=symbol,
-                            price=price,
-                            size=size,
-                            deployed_capital=deployed,
-                            direction=signal.side,
-                            regime=signal.regime,
-                            strategy=signal.strategy,
-                            stop_loss_pct=signal.stop_loss_pct,
-                            take_profit_pct=signal.take_profit_pct,
-                            secondary_take_profit_pct=signal.secondary_take_profit_pct,
-                            tp3_pct=signal.tp3_pct,
-                            tp3_close_fraction=signal.tp3_close_fraction,
-                            trail_pct=signal.trail_pct,
-                            trail_atr_mult=signal.trail_atr_mult,
-                            tp1_close_fraction=signal.tp1_close_fraction,
-                            tp2_close_fraction=signal.tp2_close_fraction,
-                            confidence=signal.confidence,
-                        )
+                        open_position(cur=cur, symbol=symbol, price=price, size=size, deployed_capital=deployed, direction=signal.side, regime=signal.regime, strategy=signal.strategy, stop_loss_pct=signal.stop_loss_pct, take_profit_pct=signal.take_profit_pct, secondary_take_profit_pct=signal.secondary_take_profit_pct, tp3_pct=signal.tp3_pct, tp3_close_fraction=signal.tp3_close_fraction, trail_pct=signal.trail_pct, trail_atr_mult=signal.trail_atr_mult, tp1_close_fraction=signal.tp1_close_fraction, tp2_close_fraction=signal.tp2_close_fraction, confidence=signal.confidence)
                         print(f"[ENTRY] {symbol}", flush=True)
                         last_trade_time[symbol] = now
 
