@@ -33,6 +33,7 @@ class TradeSignal:
     tp3_enabled: bool = False
     tp3_close_fraction: float = 0.0
     cooldown_bars: int = 0
+    max_trades_per_week: int = 0
 
 
 def _cap(value, low, high):
@@ -52,7 +53,7 @@ def _parse_args(*args: Any):
 
 
 def no_trade_signal(symbol, regime, reason="No valid setup"):
-    return TradeSignal(symbol, "FLAT", "no_trade", str(regime), 0.0, reason, 0, 0, 0, 0)
+    return TradeSignal(symbol, "FLAT", "no_trade", str(regime), 0.0, reason, 0, 0, 0, 0, max_trades_per_week=0)
 
 
 # ================= INDICATORS =================
@@ -145,7 +146,6 @@ def _structure_ok_long(df: pd.DataFrame) -> bool:
     return bool(higher_high and higher_low)
 
 
-
 def _structure_ok_short(df: pd.DataFrame) -> bool:
     if len(df) < 12:
         return False
@@ -209,6 +209,7 @@ def _long_signal(symbol: str, df: pd.DataFrame):
             secondary_take_profit_pct=_calc_tp(r["atr_pct"], 0.026, 2.8, 0.055),
             trail_pct=_calc_tp(r["atr_pct"], 0.0075, 1.0, 0.022),
             cooldown_bars=12,
+            max_trades_per_week=2,
         )
     return None
 
@@ -255,6 +256,7 @@ def _short_signal(symbol: str, df: pd.DataFrame):
             secondary_take_profit_pct=_calc_tp(r["atr_pct"], 0.026, 2.8, 0.055),
             trail_pct=_calc_tp(r["atr_pct"], 0.0075, 1.0, 0.022),
             cooldown_bars=12,
+            max_trades_per_week=2,
         )
     return None
 
