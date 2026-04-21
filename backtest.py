@@ -78,10 +78,15 @@ def run_backtest(symbol, timeframe, start=None, end=None):
 
     cooldown_until = -1
 
+    weekly_trade_count = {}
+
     for i in range(80, len(df) - 1):
         window = df.iloc[: i + 1]
         bar = df.iloc[i + 1]
         entry_idx = i + 1
+
+        week_key = bar["timestamp"].isocalendar()[:2]
+        weekly_trade_count.setdefault(week_key, 0)
 
         # exit
         if position:
@@ -104,7 +109,14 @@ def run_backtest(symbol, timeframe, start=None, end=None):
         # entry
         signal = generate_signal(window)
 
-        if position is None and signal and entry_idx >= cooldown_until:
+        max_weekly = _sig(signal, "max_trades_per_week", 0)
+
+        if (
+            position is None
+            and signal
+            and entry_idx >= cooldown_until
+            and (max_weekly == 0 or weekly_trade_count[week_key] < max_weekly)
+        ):
             side = _sig(signal, "side")
             entry_price = _slippage(bar["open"], bar["atr_pct"], side)
 
@@ -124,6 +136,7 @@ def run_backtest(symbol, timeframe, start=None, end=None):
             }
 
             cash -= qty * entry_price + fee
+            weekly_trade_count[week_key] += 1
 
         equity.append(cash + (position["qty"] * bar["close"] if position else 0))
 
