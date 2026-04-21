@@ -18,6 +18,10 @@ from price_feed import feeds
 from risk import get_dynamic_capital
 from state import get_controls, get_state, set_control
 from api_v2 import api_v2
+import datetime
+
+start = int(datetime.datetime(2022, 1, 1).timestamp() * 1000)
+raw = fetch_ohlcv_full(symbol, timeframe, start)
 app = Flask(__name__)
 app.register_blueprint(api_v2, url_prefix="/api/v2")
 # ── CORS ──────────────────────────────────────────────────────────────────────
