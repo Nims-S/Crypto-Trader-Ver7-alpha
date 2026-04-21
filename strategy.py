@@ -126,7 +126,7 @@ def generate_signal(symbol: str, df: pd.DataFrame):
     if df.empty or len(df) < 60:
         return no_trade_signal(symbol, Regime.NO_TRADE, "Insufficient data")
 
-        row = df.iloc[-1]
+    row = df.iloc[-1]
     prev = df.iloc[-2]
     prev2 = df.iloc[-3]
     regime = detect_regime(row)
@@ -134,28 +134,24 @@ def generate_signal(symbol: str, df: pd.DataFrame):
     if regime != Regime.TREND:
         return no_trade_signal(symbol, regime, "Trend structure not present")
 
-    # ===== TREND VALIDATION =====
     trend_ok = (
         row["ema20"] > row["ema50"] > row["ema200"]
         and row["close"] > row["ema50"]
     )
-
     if not trend_ok:
         return no_trade_signal(symbol, regime, "Trend stack failed")
 
-    # ===== PULLBACK =====
     recent_pullback = (
         (prev["low"] <= prev["ema20"] * 1.01)
         or (prev["close"] < prev["ema20"])
+        or (prev2["close"] < prev2["ema20"])
     )
 
-    # ===== RECLAIM =====
     reclaim_candle = (
         row["close"] > row["ema20"]
         and row["close"] > prev["high"]
     )
 
-    # ===== MOMENTUM FILTER =====
     momentum_ok = (
         45 <= row["rsi"] <= 68
         and row["vol_ratio"] >= 1.05
