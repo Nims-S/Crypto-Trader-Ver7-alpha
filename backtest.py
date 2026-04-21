@@ -12,12 +12,25 @@ import pandas as pd
 from strategy import compute_indicators, generate_signal
 
 
-def fetch_ohlcv(symbol: str, timeframe: str, limit: int) -> pd.DataFrame:
-    ex = ccxt.binance({"enableRateLimit": True, "timeout": 20000})
-    bars = ex.fetch_ohlcv(symbol, timeframe=timeframe, limit=limit)
-    df = pd.DataFrame(bars, columns=["timestamp", "open", "high", "low", "close", "volume"])
-    df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms", utc=True)
-    return compute_indicators(df)
+def fetch_ohlcv_full(symbol, timeframe, start_ts):
+    import time
+    all_candles = []
+    since = start_ts
+
+    while True:
+        candles = exchange.fetch_ohlcv(symbol, timeframe, since=since, limit=1000)
+        if not candles:
+            break
+
+        all_candles += candles
+        since = candles[-1][0] + 1
+
+        if len(candles) < 1000:
+            break
+
+        time.sleep(exchange.rateLimit / 1000)
+
+    return all_candles
 
 
 def run_smoke_backtest(symbol: str, timeframe: str, limit: int = 1000):
