@@ -25,6 +25,14 @@ def _to_ms(value: str | None) -> int | None:
     return int(ts.timestamp() * 1000)
 
 
+def _sig(signal, key: str, default=None):
+    if signal is None:
+        return default
+    if isinstance(signal, dict):
+        return signal.get(key, default)
+    return getattr(signal, key, default)
+
+
 def fetch_ohlcv_full(symbol: str, timeframe: str, since_ms: int | None = None, until_ms: int | None = None) -> pd.DataFrame:
     rows = []
     since = since_ms
@@ -60,9 +68,9 @@ def run_smoke_backtest(symbol: str, timeframe: str, start: str | None = None, en
             raise RuntimeError("no market data returned")
         df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms", utc=True)
         df = compute_indicators(df)
-        df = compute_indicators(df)
     else:
         df = fetch_ohlcv_full(symbol, timeframe, since_ms, until_ms)
+
     if df.empty or len(df) < 80:
         raise RuntimeError("not enough data for a smoke backtest")
 
@@ -91,10 +99,20 @@ def run_smoke_backtest(symbol: str, timeframe: str, start: str | None = None, en
                 position = None
 
         signal = generate_signal(window)
-        if position is None and signal and signal.side == "LONG" and signal.strategy != "no_trade":
+        side = _sig(signal, "side")
+        strategy = _sig(signal, "strategy")
+        stop_loss_pct = _sig(signal, "stop_loss_pct")
+        take_profit_pct = _sig(signal, "take_profit_pct")
+
+        if position is None and signal and str(side).upper() == "LONG" and strategy != "no_trade":
             entry = float(bar["open"])
             qty = (cash * 0.33) / entry
-            position = {"entry": entry, "qty": qty, "sl": entry * (1 - float(signal.stop_loss_pct)), "tp": entry * (1 + float(signal.take_profit_pct))}
+            position = {
+                "entry": entry,
+                "qty": qty,
+                "sl": entry * (1 - float(stop_loss_pct)),
+                "tp": entry * (1 + float(take_profit_pct)),
+            }
             cash -= qty * entry
 
         equity_curve.append(cash + (position["qty"] * bar["close"] if position else 0.0))
