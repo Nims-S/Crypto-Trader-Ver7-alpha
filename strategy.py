@@ -134,10 +134,48 @@ def _ensure_indicators(df: pd.DataFrame) -> pd.DataFrame:
     return compute_indicators(df)
 
 
+def _structure_ok_long(df: pd.DataFrame) -> bool:
+    if len(df) < 12:
+        return False
+    r = df.iloc[-1]
+    recent_high_10 = df["high"].rolling(10).max().iloc[-2]
+    recent_low_10 = df["low"].iloc[-10:-3].min()
+    higher_high = r["high"] > recent_high_10
+    higher_low = df["low"].iloc[-3] > recent_low_10
+    return bool(higher_high and higher_low)
+
+
+
+def _structure_ok_short(df: pd.DataFrame) -> bool:
+    if len(df) < 12:
+        return False
+    r = df.iloc[-1]
+    recent_low_10 = df["low"].rolling(10).min().iloc[-2]
+    recent_high_10 = df["high"].iloc[-10:-3].max()
+    lower_low = r["low"] < recent_low_10
+    lower_high = df["high"].iloc[-3] < recent_high_10
+    return bool(lower_low and lower_high)
+
+
+def _pullback_depth_ok(row: pd.Series) -> bool:
+    pullback_depth = abs(row["close"] - row["ema20"]) / row["close"]
+    return 0.002 <= pullback_depth <= 0.015
+
+
+def _body_strength_ok(row: pd.Series) -> bool:
+    body_strength = abs(row["close"] - row["open"]) / (row["high"] - row["low"] + 1e-9)
+    return body_strength >= 0.6
+
+
 def _long_signal(symbol: str, df: pd.DataFrame):
     r = df.iloc[-1]
     prev = df.iloc[-2]
     prev2 = df.iloc[-3]
+
+    if not _structure_ok_long(df):
+        return None
+    if not _pullback_depth_ok(r):
+        return None
 
     pullback = (
         (prev["close"] < prev["ema20"] or prev2["close"] < prev2["ema20"])
@@ -148,11 +186,12 @@ def _long_signal(symbol: str, df: pd.DataFrame):
         r["close"] > r["open"]
         and r["close"] > max(prev["high"], prev2["high"])
         and r["close"] >= r["high"] - (r["high"] - r["low"]) * 0.35
+        and _body_strength_ok(r)
     )
 
     momentum = (
         48 <= r["rsi"] <= 66
-        and r["vol_ratio"] > 1.15
+        and r["vol_ratio"] > 1.05
         and 0.006 <= r["atr_pct"] <= 0.025
         and 0.025 <= r["bb_width"] <= 0.09
     )
@@ -179,6 +218,11 @@ def _short_signal(symbol: str, df: pd.DataFrame):
     prev = df.iloc[-2]
     prev2 = df.iloc[-3]
 
+    if not _structure_ok_short(df):
+        return None
+    if not _pullback_depth_ok(r):
+        return None
+
     pullback = (
         (prev["close"] > prev["ema20"] or prev2["close"] > prev2["ema20"])
         and max(prev["high"], prev2["high"]) >= r["ema20"] * 0.996
@@ -188,11 +232,12 @@ def _short_signal(symbol: str, df: pd.DataFrame):
         r["close"] < r["open"]
         and r["close"] < min(prev["low"], prev2["low"])
         and r["close"] <= r["low"] + (r["high"] - r["low"]) * 0.35
+        and _body_strength_ok(r)
     )
 
     momentum = (
         34 <= r["rsi"] <= 52
-        and r["vol_ratio"] > 1.15
+        and r["vol_ratio"] > 1.05
         and 0.006 <= r["atr_pct"] <= 0.025
         and 0.025 <= r["bb_width"] <= 0.09
     )
