@@ -148,8 +148,8 @@ def generate_signal(symbol: str, df: pd.DataFrame):
         return no_trade_signal(symbol, regime, "Trend stack failed")
 
     recent_pullback = (
-        min(df.iloc[-3:]["low"].min(), prev["low"], prev2["low"]) <= row["ema20"] * 1.002
-        and (prev["close"] < prev["ema20"] or prev2["close"] < prev2["ema20"])
+        (prev["low"] <= prev["ema20"] * 1.01) or
+        (prev["close"] < prev["ema20"])
     )
 
     reclaim_candle = (
