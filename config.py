@@ -5,7 +5,7 @@ BOT_VERSION = "v7 alpha"
 SYMBOLS = ["BTC/USDT", "ETH/USDT", "SOL/USDT"]
 
 CAPITAL = float(os.getenv("CAPITAL", 100000))
-RISK = float(os.getenv("RISK", 0.01))
+RISK = float(os.getenv("RISK", 0.005))
 MAX_POSITIONS = int(os.getenv("MAX_POSITIONS", 3))
 MAX_DAILY_LOSS_PCT = float(os.getenv("MAX_DAILY_LOSS_PCT", 0.03))
 MAX_WEEKLY_LOSS_PCT = float(os.getenv("MAX_WEEKLY_LOSS_PCT", 0.06))
