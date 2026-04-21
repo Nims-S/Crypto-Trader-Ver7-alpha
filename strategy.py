@@ -96,7 +96,7 @@ def compute_indicators(df: pd.DataFrame) -> pd.DataFrame:
 
 
 # ================= SIGNAL =================
-def _higher_timeframe_ok(df: pd.DataFrame) -> bool:
+def _higher_timeframe_ok(df: pd.DataFrame, direction: str) -> bool:
     if len(df) < 120 or "timestamp" not in df.columns:
         return False
 
@@ -114,11 +114,91 @@ def _higher_timeframe_ok(df: pd.DataFrame) -> bool:
     htf = compute_indicators(htf)
     r = htf.iloc[-1]
 
-    return (
-        r["ema20"] > r["ema50"] > r["ema200"]
-        and r["close"] > r["ema50"]
-        and r["rsi"] >= 50
+    if direction == "LONG":
+        return r["ema20"] > r["ema50"] > r["ema200"] and r["close"] > r["ema50"] and r["rsi"] >= 48
+    if direction == "SHORT":
+        return r["ema20"] < r["ema50"] < r["ema200"] and r["close"] < r["ema50"] and r["rsi"] <= 52
+    return False
+
+
+def _long_signal(symbol: str, df: pd.DataFrame):
+    r = df.iloc[-1]
+    prev = df.iloc[-2]
+    prev2 = df.iloc[-3]
+
+    pullback = (
+        (prev["close"] < prev["ema20"] or prev2["close"] < prev2["ema20"])
+        and min(prev["low"], prev2["low"]) <= r["ema20"] * 1.004
     )
+
+    reclaim = (
+        r["close"] > r["open"]
+        and r["close"] > max(prev["high"], prev2["high"])
+        and r["close"] >= r["high"] - (r["high"] - r["low"]) * 0.35
+    )
+
+    momentum = (
+        48 <= r["rsi"] <= 66
+        and r["vol_ratio"] > 1.15
+        and 0.006 <= r["atr_pct"] <= 0.025
+        and 0.025 <= r["bb_width"] <= 0.09
+    )
+
+    if pullback and reclaim and momentum:
+        return TradeSignal(
+            symbol=symbol,
+            side="LONG",
+            strategy="trend_pullback_v7",
+            regime="trend",
+            confidence=0.88,
+            reason="strict long setup",
+            stop_loss_pct=_calc_tp(r["atr_pct"], 0.006, 1.0, 0.020),
+            take_profit_pct=_calc_tp(r["atr_pct"], 0.015, 1.7, 0.032),
+            secondary_take_profit_pct=_calc_tp(r["atr_pct"], 0.026, 2.8, 0.055),
+            trail_pct=_calc_tp(r["atr_pct"], 0.0075, 1.0, 0.022),
+            cooldown_bars=12,
+        )
+    return None
+
+
+def _short_signal(symbol: str, df: pd.DataFrame):
+    r = df.iloc[-1]
+    prev = df.iloc[-2]
+    prev2 = df.iloc[-3]
+
+    pullback = (
+        (prev["close"] > prev["ema20"] or prev2["close"] > prev2["ema20"])
+        and max(prev["high"], prev2["high"]) >= r["ema20"] * 0.996
+    )
+
+    reclaim = (
+        r["close"] < r["open"]
+        and r["close"] < min(prev["low"], prev2["low"])
+        and r["close"] <= r["low"] + (r["high"] - r["low"]) * 0.35
+    )
+
+    momentum = (
+        34 <= r["rsi"] <= 52
+        and r["vol_ratio"] > 1.15
+        and 0.006 <= r["atr_pct"] <= 0.025
+        and 0.025 <= r["bb_width"] <= 0.09
+    )
+
+    if pullback and reclaim and momentum:
+        return TradeSignal(
+            symbol=symbol,
+            side="SHORT",
+            strategy="trend_pullback_v7",
+            regime="trend",
+            confidence=0.88,
+            reason="strict short setup",
+            stop_loss_pct=_calc_tp(r["atr_pct"], 0.006, 1.0, 0.020),
+            take_profit_pct=_calc_tp(r["atr_pct"], 0.015, 1.7, 0.032),
+            secondary_take_profit_pct=_calc_tp(r["atr_pct"], 0.026, 2.8, 0.055),
+            trail_pct=_calc_tp(r["atr_pct"], 0.0075, 1.0, 0.022),
+            cooldown_bars=12,
+        )
+    return None
 
 
 def generate_signal(*args):
@@ -128,52 +208,28 @@ def generate_signal(*args):
     if df is None or len(df) < 80:
         return None
 
+    if "timestamp" not in df.columns:
+        return None
+
+    df = compute_indicators(df)
+    if df.empty:
+        return None
+
     r = df.iloc[-1]
-    prev = df.iloc[-2]
-    prev2 = df.iloc[-3]
 
-    if not _higher_timeframe_ok(df):
+    if r["atr_pct"] > 0.03 or r["bb_width"] > 0.12:
         return None
 
-    trend_ok = (
-        r["ema20"] > r["ema50"] > r["ema200"]
-        and r["close"] > r["ema50"]
-    )
+    if _higher_timeframe_ok(df, "LONG"):
+        if r["ema20"] > r["ema50"] > r["ema200"] and r["close"] > r["ema50"]:
+            sig = _long_signal(symbol, df)
+            if sig:
+                return sig
 
-    if not trend_ok:
-        return None
-
-    pullback = (
-        (prev["close"] < prev["ema20"] or prev2["close"] < prev2["ema20"])
-        and min(prev["low"], prev2["low"]) <= r["ema20"] * 1.002
-    )
-
-    reclaim = (
-        r["close"] > r["open"]
-        and r["close"] > max(prev["high"], prev2["high"])
-        and r["close"] >= r["high"] - (r["high"] - r["low"]) * 0.3
-    )
-
-    momentum = (
-        50 <= r["rsi"] <= 63
-        and r["vol_ratio"] > 1.25
-        and 0.008 <= r["atr_pct"] <= 0.02
-        and 0.03 <= r["bb_width"] <= 0.075
-    )
-
-    if pullback and reclaim and momentum:
-        return TradeSignal(
-            symbol=symbol,
-            side="LONG",
-            strategy="trend_pullback_v7",
-            regime="trend",
-            confidence=0.9,
-            reason="strict setup",
-            stop_loss_pct=_calc_tp(r["atr_pct"], 0.006, 1.0, 0.018),
-            take_profit_pct=_calc_tp(r["atr_pct"], 0.016, 1.8, 0.03),
-            secondary_take_profit_pct=_calc_tp(r["atr_pct"], 0.028, 3.0, 0.05),
-            trail_pct=_calc_tp(r["atr_pct"], 0.008, 1.0, 0.02),
-            cooldown_bars=24,
-        )
+    if _higher_timeframe_ok(df, "SHORT"):
+        if r["ema20"] < r["ema50"] < r["ema200"] and r["close"] < r["ema50"]:
+            sig = _short_signal(symbol, df)
+            if sig:
+                return sig
 
     return None
