@@ -102,7 +102,7 @@ def _higher_timeframe_ok(df: pd.DataFrame) -> bool:
 
     htf = (
         df.set_index("timestamp")
-        .resample("4H")
+        .resample("4h")
         .agg({"open": "first", "high": "max", "low": "min", "close": "last", "volume": "sum"})
         .dropna()
         .reset_index()
