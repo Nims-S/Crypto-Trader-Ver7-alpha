@@ -1,0 +1,9 @@
+flask
+ccxt
+pandas
+psycopg2-binary
+websocket-client
+requests
+gunicorn
+Flask-Cors
+pytest

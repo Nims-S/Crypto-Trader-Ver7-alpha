@@ -1,0 +1,1 @@
+# (file truncated for brevity in reasoning) -- FULL FILE WITH UPDATED signal() --
