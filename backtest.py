@@ -33,6 +33,23 @@ def _sig(signal, key: str, default=None):
     return getattr(signal, key, default)
 
 
+def _get_entry_stop_tp(signal, entry: float, side: str) -> tuple[float, float]:
+    side = (side or "").upper()
+    sl = _sig(signal, "sl")
+    tp = _sig(signal, "tp")
+    stop_loss_pct = _sig(signal, "stop_loss_pct")
+    take_profit_pct = _sig(signal, "take_profit_pct")
+
+    if sl is None and stop_loss_pct is not None:
+        sl = entry * (1 - float(stop_loss_pct)) if side == "LONG" else entry * (1 + float(stop_loss_pct))
+    if tp is None and take_profit_pct is not None:
+        tp = entry * (1 + float(take_profit_pct)) if side == "LONG" else entry * (1 - float(take_profit_pct))
+
+    if sl is None or tp is None:
+        raise ValueError("signal must include either absolute sl/tp or pct fields")
+    return float(sl), float(tp)
+
+
 def fetch_ohlcv_full(symbol: str, timeframe: str, since_ms: int | None = None, until_ms: int | None = None) -> pd.DataFrame:
     rows = []
     since = since_ms
@@ -85,34 +102,35 @@ def run_smoke_backtest(symbol: str, timeframe: str, start: str | None = None, en
         bar = df.iloc[i + 1]
 
         if position is not None:
-            if bar["low"] <= position["sl"]:
+            if position["side"] == "LONG":
+                stop_hit = bar["low"] <= position["sl"]
+                tp_hit = bar["high"] >= position["tp"]
+            else:
+                stop_hit = bar["high"] >= position["sl"]
+                tp_hit = bar["low"] <= position["tp"]
+
+            if stop_hit:
                 exit_price = position["sl"]
-                pnl = (exit_price - position["entry"]) * position["qty"]
+                pnl = (exit_price - position["entry"]) * position["qty"] if position["side"] == "LONG" else (position["entry"] - exit_price) * position["qty"]
                 cash += position["qty"] * exit_price
                 trades.append({"entry": position["entry"], "exit": exit_price, "pnl": pnl, "reason": "sl"})
                 position = None
-            elif bar["high"] >= position["tp"]:
+            elif tp_hit:
                 exit_price = position["tp"]
-                pnl = (exit_price - position["entry"]) * position["qty"]
+                pnl = (exit_price - position["entry"]) * position["qty"] if position["side"] == "LONG" else (position["entry"] - exit_price) * position["qty"]
                 cash += position["qty"] * exit_price
                 trades.append({"entry": position["entry"], "exit": exit_price, "pnl": pnl, "reason": "tp"})
                 position = None
 
         signal = generate_signal(window)
-        side = _sig(signal, "side")
+        side = str(_sig(signal, "side", "")).upper()
         strategy = _sig(signal, "strategy")
-        stop_loss_pct = _sig(signal, "stop_loss_pct")
-        take_profit_pct = _sig(signal, "take_profit_pct")
 
-        if position is None and signal and str(side).upper() == "LONG" and strategy != "no_trade":
+        if position is None and signal and side in {"LONG", "SHORT"} and strategy != "no_trade":
             entry = float(bar["open"])
             qty = (cash * 0.33) / entry
-            position = {
-                "entry": entry,
-                "qty": qty,
-                "sl": entry * (1 - float(stop_loss_pct)),
-                "tp": entry * (1 + float(take_profit_pct)),
-            }
+            sl, tp = _get_entry_stop_tp(signal, entry, side)
+            position = {"entry": entry, "qty": qty, "sl": sl, "tp": tp, "side": side}
             cash -= qty * entry
 
         equity_curve.append(cash + (position["qty"] * bar["close"] if position else 0.0))
@@ -120,7 +138,7 @@ def run_smoke_backtest(symbol: str, timeframe: str, start: str | None = None, en
     if position is not None:
         last = df.iloc[-1]
         exit_price = float(last["close"])
-        pnl = (exit_price - position["entry"]) * position["qty"]
+        pnl = (exit_price - position["entry"]) * position["qty"] if position["side"] == "LONG" else (position["entry"] - exit_price) * position["qty"]
         cash += position["qty"] * exit_price
         trades.append({"entry": position["entry"], "exit": exit_price, "pnl": pnl, "reason": "eod"})
 
