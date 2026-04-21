@@ -100,8 +100,12 @@ def _higher_timeframe_ok(df: pd.DataFrame, direction: str) -> bool:
     if len(df) < 120 or "timestamp" not in df.columns:
         return False
 
+    # Use a compact slice to avoid pandas block-consolidation memory spikes.
+    cols = [c for c in ["timestamp", "open", "high", "low", "close", "volume"] if c in df.columns]
+    htf_src = df.loc[:, cols].tail(800).copy()
+
     htf = (
-        df.set_index("timestamp")
+        htf_src.set_index("timestamp")
         .resample("4h")
         .agg({"open": "first", "high": "max", "low": "min", "close": "last", "volume": "sum"})
         .dropna()
@@ -112,13 +116,22 @@ def _higher_timeframe_ok(df: pd.DataFrame, direction: str) -> bool:
         return False
 
     htf = compute_indicators(htf)
-    r = htf.iloc[-1]
+    if htf.empty:
+        return False
 
+    r = htf.iloc[-1]
     if direction == "LONG":
         return r["ema20"] > r["ema50"] > r["ema200"] and r["close"] > r["ema50"] and r["rsi"] >= 48
     if direction == "SHORT":
         return r["ema20"] < r["ema50"] < r["ema200"] and r["close"] < r["ema50"] and r["rsi"] <= 52
     return False
+
+
+def _ensure_indicators(df: pd.DataFrame) -> pd.DataFrame:
+    required = {"ema20", "ema50", "ema200", "rsi", "atr", "atr_pct", "vol_ratio", "bb_width", "trend_strength"}
+    if required.issubset(df.columns):
+        return df.copy().reset_index(drop=True)
+    return compute_indicators(df)
 
 
 def _long_signal(symbol: str, df: pd.DataFrame):
@@ -207,29 +220,25 @@ def generate_signal(*args):
 
     if df is None or len(df) < 80:
         return None
-
     if "timestamp" not in df.columns:
         return None
 
-    df = compute_indicators(df)
+    df = _ensure_indicators(df)
     if df.empty:
         return None
 
     r = df.iloc[-1]
-
     if r["atr_pct"] > 0.03 or r["bb_width"] > 0.12:
         return None
 
-    if _higher_timeframe_ok(df, "LONG"):
-        if r["ema20"] > r["ema50"] > r["ema200"] and r["close"] > r["ema50"]:
-            sig = _long_signal(symbol, df)
-            if sig:
-                return sig
+    if _higher_timeframe_ok(df, "LONG") and r["ema20"] > r["ema50"] > r["ema200"] and r["close"] > r["ema50"]:
+        sig = _long_signal(symbol, df)
+        if sig:
+            return sig
 
-    if _higher_timeframe_ok(df, "SHORT"):
-        if r["ema20"] < r["ema50"] < r["ema200"] and r["close"] < r["ema50"]:
-            sig = _short_signal(symbol, df)
-            if sig:
-                return sig
+    if _higher_timeframe_ok(df, "SHORT") and r["ema20"] < r["ema50"] < r["ema200"] and r["close"] < r["ema50"]:
+        sig = _short_signal(symbol, df)
+        if sig:
+            return sig
 
     return None
