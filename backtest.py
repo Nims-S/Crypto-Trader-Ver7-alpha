@@ -263,7 +263,7 @@ def run_backtest(sym, tf, start=None, end=None):
                     "entry": ep,
                     "qty_total": qty,
                     "qty_open": qty,
-                    "qty_tp1": qty * 0.5,
+                    "qty_tp1": qty * 0.30,
                     "sl": sl,
                     "tp1": tp1,
                     "tp2": tp2,
