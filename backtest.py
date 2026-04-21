@@ -60,6 +60,7 @@ def run_smoke_backtest(symbol: str, timeframe: str, start: str | None = None, en
             raise RuntimeError("no market data returned")
         df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms", utc=True)
         df = compute_indicators(df)
+        df = compute_indicators(df)
     else:
         df = fetch_ohlcv_full(symbol, timeframe, since_ms, until_ms)
     if df.empty or len(df) < 80:
@@ -89,7 +90,7 @@ def run_smoke_backtest(symbol: str, timeframe: str, start: str | None = None, en
                 trades.append({"entry": position["entry"], "exit": exit_price, "pnl": pnl, "reason": "tp"})
                 position = None
 
-        signal = generate_signal(symbol, window)
+        signal = generate_signal(window)
         if position is None and signal and signal.side == "LONG" and signal.strategy != "no_trade":
             entry = float(bar["open"])
             qty = (cash * 0.33) / entry
