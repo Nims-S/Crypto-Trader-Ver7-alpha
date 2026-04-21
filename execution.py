@@ -22,18 +22,36 @@ def _record_close(cur, symbol, entry, close_price, closed_size, is_long, regime,
     if closed_size <= 0:
         return 0.0
     pnl = ((close_price - entry) * closed_size) if is_long else ((entry - close_price) * closed_size)
-    cur.execute("INSERT INTO trades (symbol, entry, exit, pnl, regime, reason, confidence, strategy) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)",
-                (symbol, entry, close_price, pnl, regime, reason, confidence, strategy))
+    cur.execute(
+        "INSERT INTO trades (symbol, entry, exit, pnl, regime, reason, confidence, strategy) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)",
+        (symbol, entry, close_price, pnl, regime, reason, confidence, strategy),
+    )
     log_trade_performance(cur, strategy, regime, pnl)
     if pnl <= 0:
         maybe_pause_symbol(cur, symbol)
     return pnl
 
 
-def open_position(cur, symbol, price, size, deployed_capital, direction, regime, strategy,
-                  stop_loss_pct, take_profit_pct, secondary_take_profit_pct,
-                  tp3_pct, tp3_close_fraction, trail_pct, trail_atr_mult,
-                  tp1_close_fraction, tp2_close_fraction, confidence):
+def open_position(
+    cur,
+    symbol,
+    price,
+    size,
+    deployed_capital,
+    direction,
+    regime,
+    strategy,
+    stop_loss_pct,
+    take_profit_pct,
+    secondary_take_profit_pct,
+    tp3_pct,
+    tp3_close_fraction,
+    trail_pct,
+    trail_atr_mult,
+    tp1_close_fraction,
+    tp2_close_fraction,
+    confidence,
+):
     is_long = direction == "LONG"
 
     sl = _sl_from_pct(price, stop_loss_pct, is_long)
@@ -43,17 +61,35 @@ def open_position(cur, symbol, price, size, deployed_capital, direction, regime,
     tp1 = price + sl_dist if is_long else price - sl_dist
     tp2 = price + (sl_dist * 2.5) if is_long else price - (sl_dist * 2.5)
 
-    cur.execute("""
+    # Enforce live 30/70 split unless a caller supplies different fractions.
+    tp1_fraction = float(tp1_close_fraction or 0.30)
+    tp2_fraction = float(tp2_close_fraction or 0.70)
+
+    cur.execute(
+        """
         INSERT INTO positions (
             symbol, entry, sl, tp, tp2, size, original_size,
             regime, confidence, direction, strategy,
             stop_loss_pct, tp1_close_fraction, tp2_close_fraction, opened_at
         ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,NOW())
-    """, (
-        symbol, price, sl, tp1, tp2, size, size,
-        regime, confidence, direction, strategy,
-        stop_loss_pct, 0.5, 0.5
-    ))
+        """,
+        (
+            symbol,
+            price,
+            sl,
+            tp1,
+            tp2,
+            size,
+            size,
+            regime,
+            confidence,
+            direction,
+            strategy,
+            stop_loss_pct,
+            tp1_fraction,
+            tp2_fraction,
+        ),
+    )
 
     send_telegram(f"🚀 OPEN {symbol} | Entry={price:.4f} | SL={sl:.4f} | TP1={tp1:.4f} TP2={tp2:.4f}")
 
@@ -67,7 +103,7 @@ def close_position(cur, position: dict, price: float, reason: str):
     strategy = position.get("strategy", "unknown")
 
     size = _current_size(cur, symbol)
-    pnl = _record_close(cur, symbol, entry, price, size, is_long, regime, reason, confidence, strategy)
+    _record_close(cur, symbol, entry, price, size, is_long, regime, reason, confidence, strategy)
     cur.execute("DELETE FROM positions WHERE symbol=%s", (symbol,))
     send_telegram(f"🛑 CLOSE {symbol} | Reason={reason} | Exit={price:.4f}")
     return True
@@ -84,6 +120,7 @@ def manage_position(cur, position: dict, price: float):
     regime = position.get("regime", "unknown")
     confidence = float(position.get("confidence") or 0)
     strategy = position.get("strategy", "unknown")
+    tp1_fraction = float(position.get("tp1_close_fraction") or 0.30)
 
     # TIME STOP (24h)
     opened_at = position.get("opened_at")
@@ -99,10 +136,12 @@ def manage_position(cur, position: dict, price: float):
     # TP1 (partial + BE)
     if not tp1_hit and ((is_long and price >= tp1) or (not is_long and price <= tp1)):
         size = _current_size(cur, symbol)
-        close_size = size * 0.5
+        close_size = size * tp1_fraction
         _record_close(cur, symbol, entry, price, close_size, is_long, regime, "tp1", confidence, strategy)
-        cur.execute("UPDATE positions SET size=%s, sl=%s, tp1_hit=TRUE WHERE symbol=%s",
-                    (size - close_size, entry, symbol))
+        cur.execute(
+            "UPDATE positions SET size=%s, sl=%s, tp1_hit=TRUE WHERE symbol=%s",
+            (size - close_size, entry, symbol),
+        )
         return
 
     # TP2 (final)
