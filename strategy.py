@@ -93,18 +93,40 @@ def compute_indicators(df: pd.DataFrame) -> pd.DataFrame:
     return precompute(df, StrategyState())
 
 
-def get_monday_range(df: pd.DataFrame, current_ts: pd.Timestamp):
+def get_monday_range(
+    df: pd.DataFrame,
+    current_ts: pd.Timestamp,
+    session_start_utc: int = 13,   # NY open
+    session_end_utc: int = 18,
+):
     df = _ensure_index(df)
     if df.empty:
         return None, None
+
     current_ts = pd.Timestamp(current_ts)
     if current_ts.tzinfo is None:
         current_ts = current_ts.tz_localize("UTC")
-    monday = df[df.index.dayofweek == 0]
+    else:
+        current_ts = current_ts.tz_convert("UTC")
+
     week_start = current_ts - pd.Timedelta(days=current_ts.dayofweek)
-    monday = monday[monday.index.date == week_start.date()]
+
+    monday = df[
+        (df.index.dayofweek == 0)
+        & (df.index.date == week_start.date())
+        & (df.index.hour >= session_start_utc)
+        & (df.index.hour < session_end_utc)
+    ]
+
+    # Fallback: if NY session has no candles yet this week, use full Monday
+    if monday.empty:
+        monday = df[
+            (df.index.dayofweek == 0)
+            & (df.index.date == week_start.date())
+        ]
     if monday.empty:
         return None, None
+
     return float(monday["high"].max()), float(monday["low"].min())
 
 
