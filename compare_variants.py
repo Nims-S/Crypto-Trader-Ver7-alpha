@@ -197,7 +197,11 @@ def _simulate(df: pd.DataFrame, symbol: str, cfg: dict) -> VariantResult:
 
             if partial_exit:
                 # TP1 partial close (30%)
-                tp1_reached = (bar_high >= pos["tp1"]) if side == "LONG" else (bar_low <= pos["tp1"])
+                tp1_confirm = cfg.get("tp1_close_confirm", False)
+                if tp1_confirm:
+                    tp1_reached = (float(bar["close"]) >= pos["tp1"]) if side == "LONG" else (float(bar["close"]) <= pos["tp1"])
+                else:
+                    tp1_reached = (bar_high >= pos["tp1"]) if side == "LONG" else (bar_low <= pos["tp1"])
                 if not pos["tp1_hit"] and tp1_reached:
                     ex   = _slip(pos["tp1"], bar_atr, bar_close, side)
                     qty1 = pos["qty_tp1"]
@@ -361,6 +365,21 @@ VARIANTS = {
         "use_fvg_sl":  True,  "partial_exit": True,
         "tp1_r":       1.0,   "tp2_r":        2.5,
         "be_after_tp1": False, "trail_atr_mult": 1.5, "long_only": True,
+    },
+    "F_trail_tight": {
+        "label":        "Partial 30%@1R (close-confirmed) + 1.0×ATR trail + remainder @2.5R",
+        "use_fvg_sl":   False, "partial_exit": True,
+        "tp1_r":        1.0,   "tp2_r":        2.5,
+        "be_after_tp1": False, "trail_atr_mult": 1.0,
+        "tp1_close_confirm": True,   # new flag — see simulator change below
+        "long_only":    True,
+    },
+    "G_trail_wider_target": {
+        "label":        "Partial 30%@1R + 1.0×ATR trail + remainder @3R",
+        "use_fvg_sl":   False, "partial_exit": True,
+        "tp1_r":        1.0,   "tp2_r":        3.0,
+        "be_after_tp1": False, "trail_atr_mult": 1.0,
+        "long_only":    True,
     },
 }
 
