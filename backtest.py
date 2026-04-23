@@ -80,7 +80,11 @@ def run_backtest(sym, tf, start=None, end=None) -> dict:
     eq:    list[float] = []
     cool  = -1
     state = StrategyState()
-
+    # After creating state:
+    state = StrategyState()
+    # Override min_atr_usd based on symbol
+    ATR_FLOORS = {"BTC/USDT": 50.0, "ETH/USDT": 15.0, "SOL/USDT": 2.0}
+    state.min_atr_usd = ATR_FLOORS.get(sym, 10.0)
     # Start at bar 200 so the 200-EMA has warmed up
     for i in range(200, len(df) - 1):
         bar = df.iloc[i + 1]
