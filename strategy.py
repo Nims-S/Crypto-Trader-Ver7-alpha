@@ -40,7 +40,7 @@ class StrategyState:
 
     # ── Monday session window (UTC hours) ────────────────────────────────────
     monday_session_start: int = 13      # NY open
-    monday_session_end:   int = 18
+    monday_session_end:   int = 22
 
 
 @dataclass
@@ -324,8 +324,7 @@ def generate_signal(*args, **kwargs) -> Optional[Signal]:
     # ── 4. ATR filters ───────────────────────────────────────────────────────
     if atr < float(cur["close"]) * state.atr_threshold_pct:
         return None
-    if atr < state.min_atr_usd:       # kills SOL and other low-cap noise
-        return None
+
 
     # ── 5. Structural pivots ─────────────────────────────────────────────────
     look       = state.swing_lookback
