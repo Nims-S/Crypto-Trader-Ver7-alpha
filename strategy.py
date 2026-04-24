@@ -85,7 +85,7 @@ def generate_signal_trend_btc(df_ltf, df_htf, symbol):
 
     body = abs(float(cur["close"] - cur["open"]))
     body_ok = body >= float(cur["rolling_body"]) * 1.05 if pd.notna(cur["rolling_body"]) else False
-    atr_ok = float(cur["atr"]) > float(cur["close"]) * 0.0015 if pd.notna(cur["atr"]) else False
+    atr_ok = float(cur["atr"]) > float(cur["close"]) * 0.0020 if pd.notna(cur["atr"]) else False
 
     htf_up = htf["close"] > htf["ema200"] and htf["ema20"] > htf["ema50"]
     ltf_up = cur["ema20"] > cur["ema50"]
@@ -96,7 +96,8 @@ def generate_signal_trend_btc(df_ltf, df_htf, symbol):
 
     if htf_up and ltf_up and body_ok and atr_ok and (pullback and reclaim or breakout):
         entry = float(cur["close"])
-        stop = min(_swing_low(df_ltf, 20), float(cur["ema50"])) * 0.998
+        recent = df_ltf.iloc[:-1]
+        stop = min(_swing_low(recent, 20), float(cur["ema50"])) * 0.998
         risk = entry - stop
         if risk > 0:
             return Signal(
@@ -164,15 +165,15 @@ def generate_signal_reclaim_alt(df_ltf, symbol):
                 side="LONG",
                 entry_price=entry,
                 stop_loss=stop,
-                take_profit=entry + risk * 0.8,
+                take_profit=entry + risk * 2.2,
                 symbol=symbol,
                 strategy="alt_reclaim_v1",
                 regime="mean_reversion",
                 stop_loss_pct=risk / entry,
                 take_profit_pct=(risk * 0.8) / entry,
-                secondary_take_profit_pct=(risk * 1.4) / entry,
-                tp1_close_fraction=0.6,
-                tp2_close_fraction=0.4,
+                secondary_take_profit_pct=(risk * 4) / entry,
+                tp1_close_fraction=0.25,
+                tp2_close_fraction=0.75,
             )
 
     return None
