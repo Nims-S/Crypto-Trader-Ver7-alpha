@@ -20,10 +20,10 @@ RISK_PER_TRADE = 0.01  # 1% of running equity risked per trade
 MAX_NOTIONAL_FRAC = 0.25  # hard cap: never more than 25% of equity notional
 
 # Backtest lifecycle defaults; actual values are still mode-aware per signal.
-DEFAULT_TP1_R = 1.5
-DEFAULT_TP2_R = 3.0
-DEFAULT_TP1_QTY_FRAC = 0.30
-DEFAULT_MOVE_BE_R = 1.0
+DEFAULT_TP1_R = 1.8
+DEFAULT_TP2_R = 4.5
+DEFAULT_TP1_QTY_FRAC = 0.20
+DEFAULT_MOVE_BE_R = 1.8
 MAX_BARS_BY_REGIME = {
     "trend": 72,
     "mean_reversion": 12,
@@ -205,7 +205,7 @@ def run_backtest(sym, tf, start=None, end=None) -> dict:
                 if pos:
                     pos["tp1_hit"] = True
 
-            if pos and not pos["be_moved"] and be_hit:
+            if pos and pos["tp1_hit"] and not pos["be_moved"] and be_hit:
                 pos["sl"] = pos["entry"]
                 pos["be_moved"] = True
 
