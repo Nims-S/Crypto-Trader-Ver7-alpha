@@ -82,7 +82,8 @@ def generate_signal_trend_btc(df_ltf, df_htf, symbol):
     cur = df_ltf.iloc[-1]
     prev = df_ltf.iloc[-2]
     htf = df_htf.iloc[-2]
-
+    momentum = (cur["close"] - prev["close"]) / prev["close"]
+    momentum_ok = momentum > 0.0025
     body = abs(float(cur["close"] - cur["open"]))
     
     body_ok = body >= float(cur["rolling_body"]) * 1.10 if pd.notna(cur["rolling_body"]) else False
@@ -102,7 +103,7 @@ def generate_signal_trend_btc(df_ltf, df_htf, symbol):
 
     entry_condition = (pullback and reclaim) or breakout
 
-    if htf_up and ltf_up and trend_ok_long and body_ok and atr_ok and entry_condition:
+    if htf_up and ltf_up and trend_ok_long and body_ok and atr_ok and entry_condition and momentum_ok:
         entry = float(cur["close"])
         recent = df_ltf.iloc[:-1]
         stop = min(_swing_low(recent, 20), float(cur["ema50"])) * 0.998
@@ -131,10 +132,11 @@ def generate_signal_trend_btc(df_ltf, df_htf, symbol):
     prev_highs = df_ltf["high"].iloc[-11:-1]
     prev_lows = df_ltf["low"].iloc[-11:-1]
     breakdown = cur["close"] < prev_lows.min()
-
+    momentum = (prev["close"] - cur["close"]) / prev["close"]
+    momentum_ok = momentum > 0.0025
     entry_condition_s = (pullback_s and reclaim_s) or breakdown
 
-    if htf_down and ltf_down and trend_ok_short and body_ok and atr_ok and entry_condition_s:
+    if htf_down and ltf_down and trend_ok_short and body_ok and atr_ok and entry_condition_s and momentum_ok:
         entry = float(cur["close"])
         stop = max(_swing_high(df_ltf, 20), float(cur["ema50"])) * 1.002
         risk = stop - entry
