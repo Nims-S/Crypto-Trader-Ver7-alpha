@@ -47,19 +47,20 @@ _candle_cache: dict[str, tuple[float, pd.DataFrame]] = {}
 CANDLE_CACHE_TTL = 60
 
 
-def fetch_historical_data(symbol: str) -> pd.DataFrame:
-    cached_ts, cached_df = _candle_cache.get(symbol, (0.0, pd.DataFrame()))
+def fetch_historical_data(symbol: str, timeframe: str = DEFAULT_TIMEFRAME) -> pd.DataFrame:
+    key = f"{symbol}_{timeframe}"
+    cached_ts, cached_df = _candle_cache.get(key, (0.0, pd.DataFrame()))
     if not cached_df.empty and (time.time() - cached_ts) < CANDLE_CACHE_TTL:
         return cached_df
 
     try:
-        bars = exchange.fetch_ohlcv(symbol, timeframe=DEFAULT_TIMEFRAME, limit=CANDLE_LIMIT)
+        bars = exchange.fetch_ohlcv(symbol, timeframe=timeframe, limit=CANDLE_LIMIT)
         if not bars:
             return pd.DataFrame()
         df = pd.DataFrame(bars, columns=["timestamp", "open", "high", "low", "close", "volume"])
         df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms", utc=True)
         df = compute_indicators(df)
-        _candle_cache[symbol] = (time.time(), df)
+        _candle_cache[key] = (time.time(), df)
         return df
     except Exception as e:
         print(f"[FETCH ERROR] {symbol}: {e}", flush=True)
@@ -218,12 +219,16 @@ def run_bot():
                     update_asset(symbol=symbol, regime="unknown", strategy="waiting_for_close", signal=None, position=build_position_state(position))
                     continue
 
+                # Fetch HTF for mode routing
+                htf_tf = "1h" if symbol == "BTC/USDT" else "15m"
+                df_htf = fetch_historical_data(symbol, timeframe=htf_tf)
+
                 candle_ts = closed_df.iloc[-1]["timestamp"]
                 if last_signal_candle.get(symbol) == candle_ts:
                     update_asset(symbol=symbol, regime=position["regime"] if position else "watching", strategy=position["strategy"] if position else "waiting_for_new_candle", signal=None, position=build_position_state(position))
                     continue
 
-                signal = generate_signal(closed_df, state=states[symbol], symbol=symbol)
+                signal = generate_signal(closed_df, state=states[symbol], symbol=symbol, df_htf=df_htf)
                 last_signal_candle[symbol] = candle_ts
 
                 if signal and signal.strategy != "no_trade":
