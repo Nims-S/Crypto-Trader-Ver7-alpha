@@ -88,8 +88,9 @@ def generate_signal_trend_btc(df_ltf, df_htf, symbol):
     body_ok = body >= float(cur["rolling_body"]) * 1.10 if pd.notna(cur["rolling_body"]) else False
     atr_ok = float(cur["atr"]) > float(cur["close"]) * 0.0030 if pd.notna(cur["atr"]) else False
 
-    htf_up = htf["close"] > htf["ema200"] and htf["ema20"] > htf["ema50"] and htf["ema50"] > htf["ema200"]
-    ltf_up = cur["ema20"] > cur["ema50"] and cur["ema50"] > cur["ema200"]
+    htf_up = htf["close"] > htf["ema200"] and htf["ema20"] > htf["ema50"]
+    ltf_up = cur["ema20"] > cur["ema50"]
+
     trend_ok_long = (float(htf["ema20"]) - float(htf["ema50"])) / float(htf["close"]) > 0.003
     trend_ok_short = (float(htf["ema50"]) - float(htf["ema20"])) / float(htf["close"]) > 0.003
     pullback = cur["low"] <= cur["ema20"] * 1.005
@@ -122,8 +123,8 @@ def generate_signal_trend_btc(df_ltf, df_htf, symbol):
                 tp2_close_fraction=0.85,
             )
 
-    htf_down = htf["close"] < htf["ema200"] and htf["ema20"] < htf["ema50"] and htf["ema50"] < htf["ema200"]
-    ltf_down = cur["ema20"] < cur["ema50"] and cur["ema50"] < cur["ema200"]
+    htf_down = htf["close"] < htf["ema200"] and htf["ema20"] < htf["ema50"]
+    ltf_down = cur["ema20"] < cur["ema50"]
 
     pullback_s = cur["high"] >= cur["ema20"] * 0.99
     reclaim_s = cur["close"] < cur["ema20"] and prev["close"] >= prev["ema20"]
