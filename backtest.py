@@ -20,11 +20,11 @@ RISK_PER_TRADE    = 0.01    # 1% of running equity risked per trade
 MAX_NOTIONAL_FRAC = 0.25    # hard cap: never more than 25% of equity notional
 
 # ── Exit structure (Variant C — confirmed best across 7 variants) ─────────────
-TP1_R          = 1.0    # first target: 1R — take partial profit here
-TP2_R          = 2.5    # second target: 2.5R — close remainder here
+TP1_R          = 1.5    # first target: 1R — take partial profit here
+TP2_R          = 3    # second target: 2.5R — close remainder here
 TP1_QTY_FRAC   = 0.30   # fraction closed at TP1
-TRAIL_ATR_MULT = 1.5    # after TP1, trail SL at close - N×ATR (ratchets up only)
-MAX_BARS       = 48     # force-exit any trade open longer than 48 bars (2 days on 1h)
+MOVE_BE_R      = 1.8   # NEW)
+MAX_BARS       = 36     # force-exit any trade open longer than 48 bars (2 days on 1h)
 
 
 def _to_ms(v):
@@ -134,12 +134,7 @@ def run_backtest(sym, tf, start=None, end=None) -> dict:
             pos["bars"] += 1
             side = pos["side"]
 
-            # ── (3) Trail SL after TP1 hit ────────────────────────────────────
-            # Ratchet SL upward each bar: new_sl = close - 1.5×ATR, but never
-            # move SL down. Only active once TP1 has been hit.
-            if pos["tp1_hit"]:
-                trail_sl = bar_close - TRAIL_ATR_MULT * bar_atr   # LONG only (spot)
-                pos["sl"] = max(pos["sl"], trail_sl)
+           
 
             # ── (5) Force-exit stale trade ────────────────────────────────────
             # Fires BEFORE SL/TP checks so a trade that has been dragging for
@@ -178,6 +173,11 @@ def run_backtest(sym, tf, start=None, end=None) -> dict:
                     pos["tp1_hit"] = True
                     # Initialise trail from current bar
                     pos["sl"] = max(pos["sl"], bar_close - TRAIL_ATR_MULT * bar_atr)
+
+            # ── MOVE SL TO BREAKEVEN ─────────────────────────────────
+            if pos and not pos["be_moved"] and bar_high >= pos["be_trigger"]:
+                pos["sl"] = pos["entry"]
+                pos["be_moved"] = True
 
             # ── (4) TP2 hit — close remainder ─────────────────────────────────
             # Only checked after TP1 has been hit.
@@ -234,6 +234,8 @@ def run_backtest(sym, tf, start=None, end=None) -> dict:
                     "sl":       sl,
                     "tp1":      ep + sl_dist * TP1_R,
                     "tp2":      ep + sl_dist * TP2_R,
+                    "be_trigger": ep + sl_dist * MOVE_BE_R,   # NEW
+                    "be_moved":   False,                      # NEW
                     "side":     "LONG",
                     "cooldown": _sig(sig, "cooldown_bars", 0) or 0,
                     "tp1_hit":  False,
