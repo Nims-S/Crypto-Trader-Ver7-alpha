@@ -12,6 +12,10 @@ def _sl_from_pct(entry: float, pct: float, is_long: bool) -> float:
     return entry * (1 - pct) if is_long else entry * (1 + pct)
 
 
+def _tp_from_pct(entry: float, pct: float, is_long: bool) -> float:
+    return entry * (1 + pct) if is_long else entry * (1 - pct)
+
+
 def _current_size(cur, symbol: str) -> float:
     cur.execute("SELECT size FROM positions WHERE symbol=%s", (symbol,))
     row = cur.fetchone()
@@ -55,13 +59,20 @@ def open_position(
     is_long = direction == "LONG"
 
     sl = _sl_from_pct(price, stop_loss_pct, is_long)
-    sl_dist = abs(price - sl)
 
-    # 1R / 2.5R model
-    tp1 = price + sl_dist if is_long else price - sl_dist
-    tp2 = price + (sl_dist * 2.5) if is_long else price - (sl_dist * 2.5)
+    # Use signal-provided TP structure (fallback to 1R/2.5R if missing)
+    if take_profit_pct and take_profit_pct > 0:
+        tp1 = _tp_from_pct(price, take_profit_pct, is_long)
+    else:
+        sl_dist = abs(price - sl)
+        tp1 = price + sl_dist if is_long else price - sl_dist
 
-    # Enforce live 30/70 split unless a caller supplies different fractions.
+    if secondary_take_profit_pct and secondary_take_profit_pct > 0:
+        tp2 = _tp_from_pct(price, secondary_take_profit_pct, is_long)
+    else:
+        sl_dist = abs(price - sl)
+        tp2 = price + (sl_dist * 2.5) if is_long else price - (sl_dist * 2.5)
+
     tp1_fraction = float(tp1_close_fraction or 0.30)
     tp2_fraction = float(tp2_close_fraction or 0.70)
 
@@ -109,7 +120,7 @@ def close_position(cur, position: dict, price: float, reason: str):
     return True
 
 
-def manage_position(cur, position: dict, price: float):
+def manage_position(cur, position: dict, price: float, current_atr=None):
     symbol = position["symbol"]
     is_long = position["direction"] == "LONG"
     entry = float(position["entry"])
@@ -122,11 +133,16 @@ def manage_position(cur, position: dict, price: float):
     strategy = position.get("strategy", "unknown")
     tp1_fraction = float(position.get("tp1_close_fraction") or 0.30)
 
-    # TIME STOP (24h)
+    # Mode-aware time stop
     opened_at = position.get("opened_at")
-    if opened_at and datetime.utcnow() - opened_at >= timedelta(hours=24):
-        close_position(cur, position, price, reason="time_stop")
-        return
+    if opened_at:
+        hours_open = (datetime.utcnow() - opened_at).total_seconds() / 3600
+        if strategy.startswith("alt") and hours_open >= 6:
+            close_position(cur, position, price, reason="time_stop_fast")
+            return
+        if strategy.startswith("btc") and hours_open >= 48:
+            close_position(cur, position, price, reason="time_stop_trend")
+            return
 
     # SL
     if (is_long and price <= sl) or (not is_long and price >= sl):
