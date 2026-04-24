@@ -92,7 +92,7 @@ def generate_signal_trend_btc(df_ltf, df_htf, symbol):
     ltf_up = cur["ema20"] > cur["ema50"]
     trend_ok_long = (float(htf["ema20"]) - float(htf["ema50"])) / float(htf["close"]) > 0.003
     trend_ok_short = (float(htf["ema50"]) - float(htf["ema20"])) / float(htf["close"]) > 0.003
-    pullback = cur["low"] <= cur["ema20"] * 1.01
+    pullback = cur["low"] <= cur["ema20"] * 1.005
     reclaim = cur["close"] > cur["ema20"] and prev["close"] <= prev["ema20"]
     prev_highs = df_ltf["high"].iloc[-11:-1]
     prev_lows = df_ltf["low"].iloc[-11:-1]
