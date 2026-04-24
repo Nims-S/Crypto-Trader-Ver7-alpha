@@ -51,11 +51,14 @@ def compute_indicators(df: pd.DataFrame) -> pd.DataFrame:
 
     # ATR
     prev_close = df["close"].shift(1)
-    tr = pd.concat([
-        df["high"] - df["low"],
-        (df["high"] - prev_close).abs(),
-        (df["low"] - prev_close).abs()
-    ], axis=1).max(axis=1)
+    tr = pd.concat(
+        [
+            df["high"] - df["low"],
+            (df["high"] - prev_close).abs(),
+            (df["low"] - prev_close).abs(),
+        ],
+        axis=1,
+    ).max(axis=1)
     df["atr"] = tr.rolling(14).mean()
 
     # Body size
@@ -64,38 +67,79 @@ def compute_indicators(df: pd.DataFrame) -> pd.DataFrame:
     # EMAs
     df["ema20"] = ema(df["close"], 20)
     df["ema50"] = ema(df["close"], 50)
+    df["ema200"] = ema(df["close"], 200)
 
     return df
 
 
+def _recent_swing_low(df: pd.DataFrame, lookback: int = 20) -> float:
+    return float(df["low"].iloc[-lookback:].min())
+
+
+def _recent_swing_high(df: pd.DataFrame, lookback: int = 20) -> float:
+    return float(df["high"].iloc[-lookback:].max())
+
+
 # ─────────────────────────────────────────────────────────────
-# BTC TREND ENGINE
+# BTC TREND ENGINE (v2)
 # ─────────────────────────────────────────────────────────────
 
 def generate_signal_trend_btc(df_ltf, df_htf, symbol):
-    if df_ltf is None or df_htf is None or len(df_ltf) < 50 or len(df_htf) < 50:
+    """
+    BTC trend engine v2:
+    - requires HTF bullish structure
+    - requires LTF trend alignment
+    - only triggers after pullback + reclaim
+    - avoids entries in low-energy chop
+    """
+    if df_ltf is None or df_htf is None or len(df_ltf) < 80 or len(df_htf) < 80:
         return None
 
     df_ltf = compute_indicators(df_ltf)
     df_htf = compute_indicators(df_htf)
+    if df_ltf.empty or df_htf.empty:
+        return None
 
     cur = df_ltf.iloc[-1]
+    prev = df_ltf.iloc[-2]
+    htf = df_htf.iloc[-1]
 
-    htf_trend_up = df_htf.iloc[-1]["ema20"] > df_htf.iloc[-1]["ema50"]
-    trend_up = cur["ema20"] > cur["ema50"]
+    # ── HTF bias ─────────────────────────────────────────────────────────────
+    htf_trend_up = (
+        htf["close"] > htf["ema200"]
+        and htf["ema20"] > htf["ema50"]
+        and htf["ema50"] > htf["ema200"]
+    )
 
-    if not (htf_trend_up and trend_up):
+    # ── LTF trend + pullback/reclaim ─────────────────────────────────────────
+    ltf_trend_up = cur["ema20"] > cur["ema50"] > cur["ema200"]
+    pullback_to_ema20 = cur["low"] <= cur["ema20"] * 1.002
+    reclaim_above_ema20 = cur["close"] > cur["ema20"] and prev["close"] <= prev["ema20"] * 1.01
+
+    # Displacement / energy filter
+    body = abs(float(cur["close"]) - float(cur["open"]))
+    body_ok = pd.notna(cur["rolling_body"]) and body >= float(cur["rolling_body"]) * 1.15
+    atr_ok = pd.notna(cur["atr"]) and float(cur["atr"]) > float(cur["close"]) * 0.002
+
+    # Avoid taking entries after extended move away from EMA20
+    too_extended = float(cur["close"]) > float(cur["ema20"]) * 1.03
+
+    if not (htf_trend_up and ltf_trend_up and pullback_to_ema20 and reclaim_above_ema20 and body_ok and atr_ok):
+        return None
+    if too_extended:
         return None
 
     entry = float(cur["close"])
-    stop = float(df_ltf["low"].iloc[-5:].min())
+    stop_anchor = min(_recent_swing_low(df_ltf, 20), float(cur["ema50"]))
+    stop = stop_anchor * 0.998
 
     risk = entry - stop
     if risk <= 0:
         return None
 
-    tp1 = entry + risk * 1.5
-    tp2 = entry + risk * 3.5
+    # Wider BTC targets: fewer trades, more room for runners
+    tp1 = entry + risk * 1.8
+    tp2 = entry + risk * 4.2
 
     return Signal(
         side="LONG",
@@ -103,13 +147,14 @@ def generate_signal_trend_btc(df_ltf, df_htf, symbol):
         stop_loss=stop,
         take_profit=tp1,
         symbol=symbol,
-        strategy="btc_trend_v1",
+        strategy="btc_trend_v2",
         regime="trend",
+        confidence=0.72,
         stop_loss_pct=risk / entry,
         take_profit_pct=(tp1 - entry) / entry,
         secondary_take_profit_pct=(tp2 - entry) / entry,
-        tp1_close_fraction=0.3,
-        tp2_close_fraction=0.7,
+        tp1_close_fraction=0.25,
+        tp2_close_fraction=0.75,
     )
 
 
