@@ -1,6 +1,6 @@
 from __future__ import annotations
 import os
-os.environ["GIT_PYTHON_REFRESH"] = "quiet"
+
 import argparse
 import json
 import time
