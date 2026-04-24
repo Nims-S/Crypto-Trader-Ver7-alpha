@@ -89,6 +89,9 @@ def fetch_ohlcv_full(sym, tf, since=None, until=None) -> pd.DataFrame:
         time.sleep(exchange.rateLimit / 1000)
 
     df = pd.DataFrame(rows, columns=["timestamp", "open", "high", "low", "close", "volume"])
+    if df.empty:
+        return df
+
     df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms", utc=True)
     df = compute_indicators(df.reset_index(drop=True))
 
@@ -96,7 +99,6 @@ def fetch_ohlcv_full(sym, tf, since=None, until=None) -> pd.DataFrame:
         df["timestamp"] = pd.to_datetime(df["timestamp"], utc=True)
         df = df.set_index("timestamp").sort_index()
 
-    df["ema200"] = df["close"].ewm(span=200, min_periods=1).mean()
     return df
 
 
@@ -143,6 +145,11 @@ def run_backtest(sym, tf, start=None, end=None) -> dict:
 
     htf_tf = _htf_timeframe_for_symbol(sym, tf)
     df_htf = fetch_ohlcv_full(sym, htf_tf, _to_ms(start), _to_ms(end))
+    if df_htf.empty:
+        return {"error": f"no HTF data returned for {sym} on {htf_tf}"}
+
+    # Fast HTF alignment: one vectorized lookup for the whole run.
+    htf_pos = np.searchsorted(df_htf.index.values, df.index.values, side="right") - 1
 
     cap = 10_000.0
     cash = cap
@@ -211,7 +218,9 @@ def run_backtest(sym, tf, start=None, end=None) -> dict:
 
         if pos is None and idx >= cool:
             w = df.iloc[: i + 1]
-            sig = generate_signal(w, state=state, symbol=sym, df_htf=df_htf.iloc[: min(len(df_htf), i + 1)])
+            htf_end = htf_pos[idx]
+            htf_slice = df_htf.iloc[: htf_end + 1] if htf_end >= 0 else df_htf.iloc[:0]
+            sig = generate_signal(w, state=state, symbol=sym, df_htf=htf_slice)
 
             if sig and sig.side in {"LONG", "SHORT"}:
                 ep = _slip(float(bar["open"]), bar_atr, bar_close, sig.side)
@@ -227,7 +236,6 @@ def run_backtest(sym, tf, start=None, end=None) -> dict:
                     eq.append(cash)
                     continue
 
-                # Keep the backtest faithful to the engine, not EMA200 gatekeeping.
                 tp1, tp2, be_trigger, tp1_frac, tp2_frac = _prepare_signal_levels(sig, ep, sl)
                 regime = getattr(sig, "regime", "trend")
                 max_bars = MAX_BARS_BY_REGIME.get(regime, 36)
