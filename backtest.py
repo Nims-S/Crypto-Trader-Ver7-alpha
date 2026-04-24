@@ -23,7 +23,9 @@ MAX_NOTIONAL_FRAC = 0.25
 DEFAULT_TP1_R = 1.8
 DEFAULT_TP2_R = 4.5
 DEFAULT_TP1_QTY_FRAC = 0.20
-DEFAULT_MOVE_BE_R = 1.8
+DEFAULT_MOVE_BE_R = 2.4
+DEFAULT_TRAIL_AFTER_TP1 = True
+DEFAULT_TRAIL_ATR_MULT = 1.5
 
 MAX_BARS_BY_REGIME = {
     "trend": 72,
@@ -72,6 +74,18 @@ def _close_leg(cash: float, pos: dict, exit_p: float, qty: float, result: str, t
     if pos["qty_open"] <= 1e-10:
         return cash, None
     return cash, pos
+
+
+def _trail_stop(pos: dict, bar_close: float, bar_atr: float):
+    if not DEFAULT_TRAIL_AFTER_TP1 or not pos or not pos.get("tp1_hit"):
+        return
+
+    if pos["side"] == "LONG":
+        trail = bar_close - (bar_atr * DEFAULT_TRAIL_ATR_MULT)
+        pos["sl"] = max(pos["sl"], trail)
+    else:
+        trail = bar_close + (bar_atr * DEFAULT_TRAIL_ATR_MULT)
+        pos["sl"] = min(pos["sl"], trail)
 
 
 def fetch_ohlcv_full(sym, tf, since=None, until=None) -> pd.DataFrame:
@@ -202,6 +216,9 @@ def run_backtest(sym, tf, start=None, end=None) -> dict:
             if pos and pos["tp1_hit"] and not pos["be_moved"] and be_hit:
                 pos["sl"] = pos["entry"]
                 pos["be_moved"] = True
+
+            if pos and pos["tp1_hit"]:
+                _trail_stop(pos, bar_close, bar_atr)
 
             if pos and pos["tp1_hit"] and tp2_hit:
                 ex = _slip(pos["tp2"], bar_atr, bar_close, side)
