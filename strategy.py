@@ -82,7 +82,7 @@ def generate_signal_trend_btc(df_ltf, df_htf, symbol):
     cur = df_ltf.iloc[-1]
     prev = df_ltf.iloc[-2]
     htf = df_htf.iloc[-2]
-    momentum = (cur["close"] - prev["close"]) / prev["close"]
+    momentum = (cur["close"] - prev["close"]) / prev["close"] if prev["close"] != 0 else 0
     momentum_ok = momentum > 0.0025
     body = abs(float(cur["close"] - cur["open"]))
     
@@ -92,8 +92,8 @@ def generate_signal_trend_btc(df_ltf, df_htf, symbol):
     htf_up = htf["close"] > htf["ema200"] and htf["ema20"] > htf["ema50"]
     ltf_up = cur["ema20"] > cur["ema50"]
 
-    trend_ok_long = (float(htf["ema20"]) - float(htf["ema50"])) / float(htf["close"]) > 0.003
-    trend_ok_short = (float(htf["ema50"]) - float(htf["ema20"])) / float(htf["close"]) > 0.003
+    trend_ok_long = (htf["ema20"] - htf["ema50"]) / htf["close"] > 0.0025
+    trend_ok_short = (htf["ema50"] - htf["ema20"]) / htf["close"] > 0.0025
     pullback = cur["low"] <= cur["ema20"] * 1.005
     reclaim = cur["close"] > cur["ema20"] and prev["close"] <= prev["ema20"]
     prev_highs = df_ltf["high"].iloc[-11:-1]
@@ -132,11 +132,11 @@ def generate_signal_trend_btc(df_ltf, df_htf, symbol):
     prev_highs = df_ltf["high"].iloc[-11:-1]
     prev_lows = df_ltf["low"].iloc[-11:-1]
     breakdown = cur["close"] < prev_lows.min()
-    momentum = (prev["close"] - cur["close"]) / prev["close"]
-    momentum_ok = momentum > 0.0025
+    momentum_s = (prev["close"] - cur["close"]) / prev["close"] if prev["close"] != 0 else 0
+    momentum_ok_s = momentum_s > 0.0025
     entry_condition_s = (pullback_s and reclaim_s) or breakdown
 
-    if htf_down and ltf_down and trend_ok_short and body_ok and atr_ok and entry_condition_s and momentum_ok:
+    if htf_down and ltf_down and trend_ok_short and body_ok and atr_ok and entry_condition_s and momentum_ok_s:
         entry = float(cur["close"])
         stop = max(_swing_high(df_ltf, 20), float(cur["ema50"])) * 1.002
         risk = stop - entry
