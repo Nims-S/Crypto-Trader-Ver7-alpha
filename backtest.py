@@ -23,7 +23,7 @@ MAX_NOTIONAL_FRAC = 0.25
 DEFAULT_TP1_R = 1.8
 DEFAULT_TP2_R = 4.5
 DEFAULT_TP1_QTY_FRAC = 0.20
-DEFAULT_MOVE_BE_R = 2.4
+DEFAULT_MOVE_BE_R = 1.8  # reverted from 2.4 (too aggressive)
 DEFAULT_TRAIL_AFTER_TP1 = True
 DEFAULT_TRAIL_ATR_MULT = 1.5
 
@@ -146,7 +146,7 @@ def _prepare_signal_levels(sig, entry: float, sl: float):
     return tp1, tp2, be_trigger, tp1_qty_frac, tp2_qty_frac
 
 
-def run_backtest(sym, tf, start=None, end=None) -> dict:
+def run_backtest(sym, tf, start=None, end=None, allow_shorts=False) -> dict:
     df = fetch_ohlcv_full(sym, tf, _to_ms(start), _to_ms(end))
     if df.empty:
         return {"error": f"no data returned for {sym} on {tf}"}
@@ -164,7 +164,7 @@ def run_backtest(sym, tf, start=None, end=None) -> dict:
     trades: list[dict] = []
     eq: list[float] = []
     cool = -1
-    state = StrategyState()
+    state = StrategyState(allow_shorts=allow_shorts)
     start_idx = max(200, 50)
 
     for i in range(start_idx, len(df) - 1):
@@ -322,5 +322,6 @@ if __name__ == "__main__":
     ap.add_argument("--timeframe", default="1h")
     ap.add_argument("--start")
     ap.add_argument("--end")
+    ap.add_argument("--allow-shorts", action="store_true", help="Enable short trades")
     a = ap.parse_args()
-    print(json.dumps(run_backtest(a.symbol, a.timeframe, a.start, a.end), indent=2))
+    print(json.dumps(run_backtest(a.symbol, a.timeframe, a.start, a.end, allow_shorts=a.allow_shorts), indent=2))
