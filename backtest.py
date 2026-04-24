@@ -1,5 +1,4 @@
 from __future__ import annotations
-import os
 
 import argparse
 import json
@@ -20,12 +19,15 @@ SLIPPAGE_ATR_MULT = 0.1
 RISK_PER_TRADE = 0.01  # 1% of running equity risked per trade
 MAX_NOTIONAL_FRAC = 0.25  # hard cap: never more than 25% of equity notional
 
-# Exit structure
-TP1_R = 1.5
-TP2_R = 3.0
-TP1_QTY_FRAC = 0.30
-MOVE_BE_R = 1.8
-MAX_BARS = 36
+# Backtest lifecycle defaults; actual values are still mode-aware per signal.
+DEFAULT_TP1_R = 1.5
+DEFAULT_TP2_R = 3.0
+DEFAULT_TP1_QTY_FRAC = 0.30
+DEFAULT_MOVE_BE_R = 1.0
+MAX_BARS_BY_REGIME = {
+    "trend": 72,
+    "mean_reversion": 12,
+}
 
 
 def _to_ms(v):
@@ -51,7 +53,7 @@ def _pnl(entry: float, exit_p: float, qty: float, side: str, fee_bps: float) -> 
     return (exit_p - entry) * qty - fee if side == "LONG" else (entry - exit_p) * qty - fee
 
 
-def _close_leg(cash: float, pos: dict, exit_p: float, qty: float, result: str, trades: list, cool_idx: int):
+def _close_leg(cash: float, pos: dict, exit_p: float, qty: float, result: str, trades: list):
     pnl = _pnl(pos["entry"], exit_p, qty, pos["side"], MAKER_FEE_BPS)
     cash += pos["entry"] * qty + pnl
 
@@ -98,8 +100,50 @@ def fetch_ohlcv_full(sym, tf, since=None, until=None) -> pd.DataFrame:
     return df
 
 
+def _htf_timeframe_for_symbol(symbol: str, ltf_timeframe: str) -> str:
+    # Keep HTF above the backtest LTF so the router can work like live.
+    if symbol == "BTC/USDT":
+        return "1d" if ltf_timeframe in {"15m", "30m", "1h", "2h", "4h"} else "1h"
+    return "4h" if ltf_timeframe in {"15m", "30m", "1h"} else "1d"
+
+
+def _prepare_signal_levels(sig, entry: float, sl: float):
+    sl_dist = abs(entry - sl)
+
+    tp1_pct = _sig(sig, "take_profit_pct", 0.0) or 0.0
+    tp2_pct = _sig(sig, "secondary_take_profit_pct", 0.0) or 0.0
+
+    if tp1_pct > 0:
+        tp1 = entry * (1 + tp1_pct) if sig.side == "LONG" else entry * (1 - tp1_pct)
+    else:
+        tp1 = entry + sl_dist * DEFAULT_TP1_R if sig.side == "LONG" else entry - sl_dist * DEFAULT_TP1_R
+
+    if tp2_pct > 0:
+        tp2 = entry * (1 + tp2_pct) if sig.side == "LONG" else entry * (1 - tp2_pct)
+    else:
+        tp2 = entry + sl_dist * DEFAULT_TP2_R if sig.side == "LONG" else entry - sl_dist * DEFAULT_TP2_R
+
+    be_trigger_rr = DEFAULT_MOVE_BE_R
+    regime = getattr(sig, "regime", "trend")
+    if regime == "mean_reversion":
+        be_trigger_rr = 0.6
+
+    be_trigger = entry + sl_dist * be_trigger_rr if sig.side == "LONG" else entry - sl_dist * be_trigger_rr
+
+    tp1_qty_frac = _sig(sig, "tp1_close_fraction", DEFAULT_TP1_QTY_FRAC) or DEFAULT_TP1_QTY_FRAC
+    tp2_qty_frac = _sig(sig, "tp2_close_fraction", 1.0 - tp1_qty_frac) or (1.0 - tp1_qty_frac)
+
+    return tp1, tp2, be_trigger, tp1_qty_frac, tp2_qty_frac
+
+
 def run_backtest(sym, tf, start=None, end=None) -> dict:
     df = fetch_ohlcv_full(sym, tf, _to_ms(start), _to_ms(end))
+    if df.empty:
+        return {"error": f"no data returned for {sym} on {tf}"}
+
+    htf_tf = _htf_timeframe_for_symbol(sym, tf)
+    df_htf = fetch_ohlcv_full(sym, htf_tf, _to_ms(start), _to_ms(end))
+
     cap = 10_000.0
     cash = cap
     pos = None
@@ -108,7 +152,8 @@ def run_backtest(sym, tf, start=None, end=None) -> dict:
     cool = -1
     state = StrategyState()
 
-    for i in range(200, len(df) - 1):
+    start_idx = max(200, 50)
+    for i in range(start_idx, len(df) - 1):
         bar = df.iloc[i + 1]
         idx = i + 1
         bar_atr = float(bar["atr"])
@@ -122,9 +167,9 @@ def run_backtest(sym, tf, start=None, end=None) -> dict:
             pos["bars"] += 1
             side = pos["side"]
 
-            if pos["bars"] >= MAX_BARS:
+            if pos["bars"] >= pos["max_bars"]:
                 ex = _slip(bar_close, bar_atr, bar_close, side)
-                cash, pos = _close_leg(cash, pos, ex, pos["qty_open"], "MAX_BARS", trades, idx)
+                cash, pos = _close_leg(cash, pos, ex, pos["qty_open"], "MAX_BARS", trades)
                 cool = idx
                 eq.append(cash)
                 continue
@@ -142,16 +187,14 @@ def run_backtest(sym, tf, start=None, end=None) -> dict:
 
             if sl_hit:
                 ex = _slip(pos["sl"], bar_atr, bar_close, side)
-                cash, pos = _close_leg(cash, pos, ex, pos["qty_open"], "SL", trades, idx)
-                sl_pnl = trades[-1]["pnl"]
-                state.weekly_pnl += sl_pnl / equity
+                cash, pos = _close_leg(cash, pos, ex, pos["qty_open"], "SL", trades)
                 cool = idx
                 eq.append(cash)
                 continue
 
             if not pos["tp1_hit"] and tp1_hit:
                 ex = _slip(pos["tp1"], bar_atr, bar_close, side)
-                cash, pos = _close_leg(cash, pos, ex, pos["qty_tp1"], "TP1", trades, idx)
+                cash, pos = _close_leg(cash, pos, ex, pos["qty_tp1"], "TP1", trades)
                 if pos:
                     pos["tp1_hit"] = True
 
@@ -161,14 +204,14 @@ def run_backtest(sym, tf, start=None, end=None) -> dict:
 
             if pos and pos["tp1_hit"] and tp2_hit:
                 ex = _slip(pos["tp2"], bar_atr, bar_close, side)
-                cash, pos = _close_leg(cash, pos, ex, pos["qty_open"], "TP2", trades, idx)
+                cash, pos = _close_leg(cash, pos, ex, pos["qty_open"], "TP2", trades)
                 cool = idx
                 eq.append(cash)
                 continue
 
         if pos is None and idx >= cool:
             w = df.iloc[: i + 1]
-            sig = generate_signal(w, state=state, symbol=sym)
+            sig = generate_signal(w, state=state, symbol=sym, df_htf=df_htf.iloc[: min(len(df_htf), i + 1)])
 
             if sig and sig.side in {"LONG", "SHORT"}:
                 ep = _slip(float(bar["open"]), bar_atr, bar_close, sig.side)
@@ -179,18 +222,15 @@ def run_backtest(sym, tf, start=None, end=None) -> dict:
                     continue
 
                 sl = ep * (1 - sl_p) if sig.side == "LONG" else ep * (1 + sl_p)
-                ema200 = float(df.iloc[i]["ema200"])
-                if sig.side == "LONG" and ep < ema200:
-                    eq.append(cash)
-                    continue
-                if sig.side == "SHORT" and ep > ema200:
-                    eq.append(cash)
-                    continue
-
                 sl_dist = abs(ep - sl)
                 if sl_dist <= 0:
                     eq.append(cash)
                     continue
+
+                # Keep the backtest faithful to the engine, not EMA200 gatekeeping.
+                tp1, tp2, be_trigger, tp1_frac, tp2_frac = _prepare_signal_levels(sig, ep, sl)
+                regime = getattr(sig, "regime", "trend")
+                max_bars = MAX_BARS_BY_REGIME.get(regime, 36)
 
                 qty = (equity * RISK_PER_TRADE) / sl_dist
                 qty = min(qty, (equity * MAX_NOTIONAL_FRAC) / ep)
@@ -205,16 +245,17 @@ def run_backtest(sym, tf, start=None, end=None) -> dict:
                     "open_ts": str(bar.name),
                     "entry": ep,
                     "qty_open": qty,
-                    "qty_tp1": qty * TP1_QTY_FRAC,
+                    "qty_tp1": qty * tp1_frac,
                     "sl": sl,
-                    "tp1": ep + sl_dist * TP1_R if sig.side == "LONG" else ep - sl_dist * TP1_R,
-                    "tp2": ep + sl_dist * TP2_R if sig.side == "LONG" else ep - sl_dist * TP2_R,
-                    "be_trigger": ep + sl_dist * MOVE_BE_R if sig.side == "LONG" else ep - sl_dist * MOVE_BE_R,
+                    "tp1": tp1,
+                    "tp2": tp2,
+                    "be_trigger": be_trigger,
                     "be_moved": False,
                     "side": sig.side,
                     "cooldown": _sig(sig, "cooldown_bars", 0) or 0,
                     "tp1_hit": False,
                     "bars": 0,
+                    "max_bars": max_bars,
                 }
                 cash -= cost
 
@@ -223,7 +264,7 @@ def run_backtest(sym, tf, start=None, end=None) -> dict:
     if pos:
         last = df.iloc[-1]
         ex = _slip(float(last["close"]), float(last["atr"]), float(last["close"]), pos["side"])
-        cash, pos = _close_leg(cash, pos, ex, pos["qty_open"], "EOD_CLOSE", trades, len(df))
+        cash, pos = _close_leg(cash, pos, ex, pos["qty_open"], "EOD_CLOSE", trades)
 
     pnls = [t["pnl"] for t in trades]
     gross_win = sum(p for p in pnls if p > 0)
@@ -240,6 +281,9 @@ def run_backtest(sym, tf, start=None, end=None) -> dict:
     avg_rr = round(avg_w / avg_l, 3) if avg_l else 0.0
 
     return {
+        "symbol": sym,
+        "ltf_timeframe": tf,
+        "htf_timeframe": htf_tf,
         "trades": len(trades),
         "win_rate": round(wins / max(len(pnls), 1), 3),
         "profit_factor": round(gross_win / gross_los, 4),
