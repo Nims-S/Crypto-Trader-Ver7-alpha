@@ -132,24 +132,24 @@ def generate_signal_trend_btc(df_ltf, df_htf, symbol):
     entry_condition_s = (pullback_s and reclaim_s) or breakdown
 
     if htf_down and ltf_down and body_ok and atr_ok and entry_condition_s:
-       entry = float(cur["close"])
-       stop = max(_swing_high(df_ltf, 20), float(cur["ema50"])) * 1.002
-       risk = stop - entry
-    if risk > 0:
-        return Signal(
-            side="SHORT",
-            entry_price=entry,
-            stop_loss=stop,
-            take_profit=entry - risk * 2.2,
-            symbol=symbol,
-            strategy="btc_trend_v3",
-            regime="trend",
-            stop_loss_pct=risk / entry,
-            take_profit_pct=(risk * 2.2) / entry,
-            secondary_take_profit_pct=(risk * 4.0) / entry,
-            tp1_close_fraction=0.25,
-            tp2_close_fraction=0.75,
-        )
+        entry = float(cur["close"])
+        stop = max(_swing_high(df_ltf, 20), float(cur["ema50"])) * 1.002
+        risk = stop - entry
+        if risk > 0:
+            return Signal(
+                side="SHORT",
+                entry_price=entry,
+                stop_loss=stop,
+                take_profit=entry - risk * 2.2,
+                symbol=symbol,
+                strategy="btc_trend_v3",
+                regime="trend",
+                stop_loss_pct=risk / entry,
+                take_profit_pct=(risk * 2.2) / entry,
+                secondary_take_profit_pct=(risk * 4.0) / entry,
+                tp1_close_fraction=0.25,
+                tp2_close_fraction=0.75,
+            )
 
     return None
 
