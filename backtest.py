@@ -23,7 +23,7 @@ MAX_NOTIONAL_FRAC = 0.25
 DEFAULT_TP1_R = 1.8
 DEFAULT_TP2_R = 4.5
 DEFAULT_TP1_QTY_FRAC = 0.20
-DEFAULT_MOVE_BE_R = 1.8  # reverted from 2.4 (too aggressive)
+DEFAULT_MOVE_BE_R = 1.8
 DEFAULT_TRAIL_AFTER_TP1 = True
 DEFAULT_TRAIL_ATR_MULT = 1.5
 
@@ -135,11 +135,7 @@ def _prepare_signal_levels(sig, entry: float, sl: float):
     else:
         tp2 = entry + sl_dist * DEFAULT_TP2_R if sig.side == "LONG" else entry - sl_dist * DEFAULT_TP2_R
 
-    be_trigger_rr = DEFAULT_MOVE_BE_R
-    regime = getattr(sig, "regime", "trend")
-    if regime == "mean_reversion":
-        be_trigger_rr = 0.6
-
+    be_trigger_rr = _sig(sig, "be_trigger_rr", DEFAULT_MOVE_BE_R)
     be_trigger = entry + sl_dist * be_trigger_rr if sig.side == "LONG" else entry - sl_dist * be_trigger_rr
     tp1_qty_frac = _sig(sig, "tp1_close_fraction", DEFAULT_TP1_QTY_FRAC) or DEFAULT_TP1_QTY_FRAC
     tp2_qty_frac = _sig(sig, "tp2_close_fraction", 1.0 - tp1_qty_frac) or (1.0 - tp1_qty_frac)
@@ -250,7 +246,7 @@ def run_backtest(sym, tf, start=None, end=None, allow_shorts=False) -> dict:
 
                 tp1, tp2, be_trigger, tp1_frac, tp2_frac = _prepare_signal_levels(sig, ep, sl)
                 regime = getattr(sig, "regime", "trend")
-                max_bars = MAX_BARS_BY_REGIME.get(regime, 36)
+                max_bars = _sig(sig, "max_bars_override", 0) or MAX_BARS_BY_REGIME.get(regime, 36)
 
                 qty = (equity * RISK_PER_TRADE) / sl_dist
                 qty = min(qty, (equity * MAX_NOTIONAL_FRAC) / ep)
