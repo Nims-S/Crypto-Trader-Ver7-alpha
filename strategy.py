@@ -81,20 +81,25 @@ def generate_signal_trend_btc(df_ltf, df_htf, symbol):
 
     cur = df_ltf.iloc[-1]
     prev = df_ltf.iloc[-2]
-    htf = df_htf.iloc[-1]
+    htf = df_htf.iloc[-2]
 
     body = abs(float(cur["close"] - cur["open"]))
     body_ok = body >= float(cur["rolling_body"]) * 1.05 if pd.notna(cur["rolling_body"]) else False
-    atr_ok = float(cur["atr"]) > float(cur["close"]) * 0.0020 if pd.notna(cur["atr"]) else False
+    atr_ok = float(cur["atr"]) > float(cur["close"]) * 0.0025 if pd.notna(cur["atr"]) else False
 
     htf_up = htf["close"] > htf["ema200"] and htf["ema20"] > htf["ema50"]
     ltf_up = cur["ema20"] > cur["ema50"]
 
     pullback = cur["low"] <= cur["ema20"] * 1.01
     reclaim = cur["close"] > cur["ema20"] and prev["close"] <= prev["ema20"]
-    breakout = cur["close"] > df_ltf["high"].iloc[-10:].max()
+    prev_highs = df_ltf["high"].iloc[-11:-1]
+    prev_lows = df_ltf["low"].iloc[-11:-1]
 
-    if htf_up and ltf_up and body_ok and atr_ok and (pullback and reclaim or breakout):
+    breakout = cur["close"] > prev_highs.max()
+
+    entry_condition = (pullback and reclaim) or breakout
+
+    if htf_up and ltf_up and body_ok and atr_ok and entry_condition:
         entry = float(cur["close"])
         recent = df_ltf.iloc[:-1]
         stop = min(_swing_low(recent, 20), float(cur["ema50"])) * 0.998
@@ -104,15 +109,15 @@ def generate_signal_trend_btc(df_ltf, df_htf, symbol):
                 side="LONG",
                 entry_price=entry,
                 stop_loss=stop,
-                take_profit=entry + risk * 1.8,
+                take_profit=entry + risk * 2.2,
                 symbol=symbol,
                 strategy="btc_trend_v3",
                 regime="trend",
                 stop_loss_pct=risk / entry,
-                take_profit_pct=(risk * 1.8) / entry,
+                take_profit_pct=(risk * 2.2) / entry,
                 secondary_take_profit_pct=(risk * 4.0) / entry,
-                tp1_close_fraction=0.3,
-                tp2_close_fraction=0.7,
+                tp1_close_fraction=0.25,
+                tp2_close_fraction=0.75,
             )
 
     htf_down = htf["close"] < htf["ema200"] and htf["ema20"] < htf["ema50"]
@@ -120,9 +125,13 @@ def generate_signal_trend_btc(df_ltf, df_htf, symbol):
 
     pullback_s = cur["high"] >= cur["ema20"] * 0.99
     reclaim_s = cur["close"] < cur["ema20"] and prev["close"] >= prev["ema20"]
-    breakdown = cur["close"] < df_ltf["low"].iloc[-10:].min()
+    prev_highs = df_ltf["high"].iloc[-11:-1]
+    prev_lows = df_ltf["low"].iloc[-11:-1]
+    breakdown = cur["close"] < prev_lows.min()
 
-    if htf_down and ltf_down and body_ok and atr_ok and (pullback_s and reclaim_s or breakdown):
+    entry_condition = (pullback and reclaim) or breakout
+
+    if htf_up and ltf_up and body_ok and atr_ok and entry_condition:
         entry = float(cur["close"])
         stop = max(_swing_high(df_ltf, 20), float(cur["ema50"])) * 1.002
         risk = stop - entry
@@ -131,15 +140,15 @@ def generate_signal_trend_btc(df_ltf, df_htf, symbol):
                 side="SHORT",
                 entry_price=entry,
                 stop_loss=stop,
-                take_profit=entry - risk * 1.8,
+                take_profit=entry - risk * 2.2,
                 symbol=symbol,
                 strategy="btc_trend_v3",
                 regime="trend",
                 stop_loss_pct=risk / entry,
-                take_profit_pct=(risk * 1.8) / entry,
+                take_profit_pct=(risk * 2.2) / entry,
                 secondary_take_profit_pct=(risk * 4.0) / entry,
-                tp1_close_fraction=0.3,
-                tp2_close_fraction=0.7,
+                tp1_close_fraction=0.25,
+                tp2_close_fraction=0.75,
             )
 
     return None
