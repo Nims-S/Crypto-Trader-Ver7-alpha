@@ -9,8 +9,8 @@ import pandas as pd
 class StrategyState:
     trades_this_week: int = 0
     allow_shorts: bool = False
-    min_atr_pct: float = 0.0035
-    min_adx: float = 20.0
+    min_atr_pct: float = 0.0038
+    min_adx: float = 22.0
 
 
 @dataclass
@@ -124,14 +124,14 @@ def generate_signal_trend_btc(df_ltf, df_htf, symbol, state=None):
     body = abs(float(cur["close"] - cur["open"]))
     body_ok = body >= float(cur["rolling_body"]) * 1.10 if pd.notna(cur["rolling_body"]) else False
     atr_ok = float(cur["atr"]) > float(cur["close"]) * 0.0030 if pd.notna(cur["atr"]) else False
-    vol_ok = _atr_pct(cur) >= float(getattr(state, "min_atr_pct", 0.0035))
-    adx_ok = float(cur["adx"]) >= float(getattr(state, "min_adx", 20.0)) if pd.notna(cur["adx"]) else False
+    vol_ok = _atr_pct(cur) >= float(getattr(state, "min_atr_pct", 0.0038))
+    adx_ok = float(cur["adx"]) >= float(getattr(state, "min_adx", 22.0)) if pd.notna(cur["adx"]) else False
 
     htf_up = htf["close"] > htf["ema200"] and htf["ema20"] > htf["ema50"]
-    htf_slope_up = htf["ema20"] > htf_prev["ema20"]
+    htf_slope_up = htf["ema20"] > htf_prev["ema20"] and htf["ema50"] >= htf_prev["ema50"]
     ltf_up = cur["ema20"] > cur["ema50"]
-    trend_ok_long = (htf["ema20"] - htf["ema50"]) / htf["close"] > 0.0025
-    trend_ok_short = (htf["ema50"] - htf["ema20"]) / htf["close"] > 0.0025
+    trend_ok_long = (htf["ema20"] - htf["ema50"]) / htf["close"] > 0.0030
+    trend_ok_short = (htf["ema50"] - htf["ema20"]) / htf["close"] > 0.0030
 
     pullback = cur["low"] <= cur["ema20"] * 1.005
     reclaim = cur["close"] > cur["ema20"] and prev["close"] <= prev["ema20"]
@@ -155,13 +155,13 @@ def generate_signal_trend_btc(df_ltf, df_htf, symbol, state=None):
                 stop_loss=stop,
                 take_profit=entry + risk * 3.0,
                 symbol=symbol,
-                strategy="btc_trend_v5",
+                strategy="btc_trend_v6",
                 regime="trend",
                 stop_loss_pct=risk / entry,
                 take_profit_pct=(risk * 3.0) / entry,
-                secondary_take_profit_pct=(risk * 6.0) / entry,
-                tp1_close_fraction=0.20,
-                tp2_close_fraction=0.80,
+                secondary_take_profit_pct=(risk * 8.0) / entry,
+                tp1_close_fraction=0.10,
+                tp2_close_fraction=0.90,
             )
 
     allow_shorts = bool(getattr(state, "allow_shorts", False))
@@ -169,7 +169,7 @@ def generate_signal_trend_btc(df_ltf, df_htf, symbol, state=None):
         return None
 
     htf_down = htf["close"] < htf["ema200"] and htf["ema20"] < htf["ema50"]
-    htf_slope_down = htf["ema20"] < htf_prev["ema20"]
+    htf_slope_down = htf["ema20"] < htf_prev["ema20"] and htf["ema50"] <= htf_prev["ema50"]
     ltf_down = cur["ema20"] < cur["ema50"]
     pullback_s = cur["high"] >= cur["ema20"] * 0.995
     reclaim_s = cur["close"] < cur["ema20"] and prev["close"] >= prev["ema20"]
@@ -192,13 +192,13 @@ def generate_signal_trend_btc(df_ltf, df_htf, symbol, state=None):
                 stop_loss=stop,
                 take_profit=entry - risk * 3.0,
                 symbol=symbol,
-                strategy="btc_trend_v5",
+                strategy="btc_trend_v6",
                 regime="trend",
                 stop_loss_pct=risk / entry,
                 take_profit_pct=(risk * 3.0) / entry,
-                secondary_take_profit_pct=(risk * 6.0) / entry,
-                tp1_close_fraction=0.20,
-                tp2_close_fraction=0.80,
+                secondary_take_profit_pct=(risk * 8.0) / entry,
+                tp1_close_fraction=0.10,
+                tp2_close_fraction=0.90,
             )
 
     return None
