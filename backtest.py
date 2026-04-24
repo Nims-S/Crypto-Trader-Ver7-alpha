@@ -23,7 +23,7 @@ MAX_NOTIONAL_FRAC = 0.25  # hard cap: never more than 25% of equity notional
 DEFAULT_TP1_R = 1.8
 DEFAULT_TP2_R = 4.5
 DEFAULT_TP1_QTY_FRAC = 0.20
-DEFAULT_MOVE_BE_R = 1.8
+DEFAULT_MOVE_BE_R = 2.4
 MAX_BARS_BY_REGIME = {
     "trend": 72,
     "mean_reversion": 12,
