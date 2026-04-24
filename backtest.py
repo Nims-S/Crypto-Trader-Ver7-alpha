@@ -10,20 +10,21 @@ import pandas as pd
 
 from strategy import StrategyState, compute_indicators, generate_signal
 
+
 exchange = ccxt.binance({"enableRateLimit": True, "timeout": 20000})
 
 TAKER_FEE_BPS = 6.0
 MAKER_FEE_BPS = 2.0
 SLIPPAGE_BPS = 3.0
 SLIPPAGE_ATR_MULT = 0.1
-RISK_PER_TRADE = 0.01  # 1% of running equity risked per trade
-MAX_NOTIONAL_FRAC = 0.25  # hard cap: never more than 25% of equity notional
+RISK_PER_TRADE = 0.01
+MAX_NOTIONAL_FRAC = 0.25
 
-# Backtest lifecycle defaults; actual values are still mode-aware per signal.
 DEFAULT_TP1_R = 1.8
 DEFAULT_TP2_R = 4.5
 DEFAULT_TP1_QTY_FRAC = 0.20
 DEFAULT_MOVE_BE_R = 1.8
+
 MAX_BARS_BY_REGIME = {
     "trend": 72,
     "mean_reversion": 12,
@@ -56,7 +57,6 @@ def _pnl(entry: float, exit_p: float, qty: float, side: str, fee_bps: float) -> 
 def _close_leg(cash: float, pos: dict, exit_p: float, qty: float, result: str, trades: list):
     pnl = _pnl(pos["entry"], exit_p, qty, pos["side"], MAKER_FEE_BPS)
     cash += pos["entry"] * qty + pnl
-
     trades.append(
         {
             "ts": pos.get("open_ts", ""),
@@ -68,7 +68,6 @@ def _close_leg(cash: float, pos: dict, exit_p: float, qty: float, result: str, t
             "result": result,
         }
     )
-
     pos["qty_open"] -= qty
     if pos["qty_open"] <= 1e-10:
         return cash, None
@@ -78,6 +77,7 @@ def _close_leg(cash: float, pos: dict, exit_p: float, qty: float, result: str, t
 def fetch_ohlcv_full(sym, tf, since=None, until=None) -> pd.DataFrame:
     rows = []
     cur = since
+
     while True:
         chunk = exchange.fetch_ohlcv(sym, timeframe=tf, since=cur, limit=1000)
         if not chunk:
@@ -94,16 +94,13 @@ def fetch_ohlcv_full(sym, tf, since=None, until=None) -> pd.DataFrame:
 
     df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms", utc=True)
     df = compute_indicators(df.reset_index(drop=True))
-
     if not isinstance(df.index, pd.DatetimeIndex):
         df["timestamp"] = pd.to_datetime(df["timestamp"], utc=True)
         df = df.set_index("timestamp").sort_index()
-
     return df
 
 
 def _htf_timeframe_for_symbol(symbol: str, ltf_timeframe: str) -> str:
-    # Keep HTF above the backtest LTF so the router can work like live.
     if symbol == "BTC/USDT":
         return "1d" if ltf_timeframe in {"15m", "30m", "1h", "2h", "4h"} else "1h"
     return "4h" if ltf_timeframe in {"15m", "30m", "1h"} else "1d"
@@ -111,7 +108,6 @@ def _htf_timeframe_for_symbol(symbol: str, ltf_timeframe: str) -> str:
 
 def _prepare_signal_levels(sig, entry: float, sl: float):
     sl_dist = abs(entry - sl)
-
     tp1_pct = _sig(sig, "take_profit_pct", 0.0) or 0.0
     tp2_pct = _sig(sig, "secondary_take_profit_pct", 0.0) or 0.0
 
@@ -131,10 +127,8 @@ def _prepare_signal_levels(sig, entry: float, sl: float):
         be_trigger_rr = 0.6
 
     be_trigger = entry + sl_dist * be_trigger_rr if sig.side == "LONG" else entry - sl_dist * be_trigger_rr
-
     tp1_qty_frac = _sig(sig, "tp1_close_fraction", DEFAULT_TP1_QTY_FRAC) or DEFAULT_TP1_QTY_FRAC
     tp2_qty_frac = _sig(sig, "tp2_close_fraction", 1.0 - tp1_qty_frac) or (1.0 - tp1_qty_frac)
-
     return tp1, tp2, be_trigger, tp1_qty_frac, tp2_qty_frac
 
 
@@ -148,7 +142,6 @@ def run_backtest(sym, tf, start=None, end=None) -> dict:
     if df_htf.empty:
         return {"error": f"no HTF data returned for {sym} on {htf_tf}"}
 
-    # Fast HTF alignment: one vectorized lookup for the whole run.
     htf_pos = np.searchsorted(df_htf.index.values, df.index.values, side="right") - 1
 
     cap = 10_000.0
@@ -158,11 +151,12 @@ def run_backtest(sym, tf, start=None, end=None) -> dict:
     eq: list[float] = []
     cool = -1
     state = StrategyState()
-
     start_idx = max(200, 50)
+
     for i in range(start_idx, len(df) - 1):
         bar = df.iloc[i + 1]
         idx = i + 1
+
         bar_atr = float(bar["atr"])
         bar_close = float(bar["close"])
         bar_high = float(bar["high"])
@@ -232,6 +226,7 @@ def run_backtest(sym, tf, start=None, end=None) -> dict:
 
                 sl = ep * (1 - sl_p) if sig.side == "LONG" else ep * (1 + sl_p)
                 sl_dist = abs(ep - sl)
+
                 if sl_dist <= 0:
                     eq.append(cash)
                     continue
@@ -245,6 +240,7 @@ def run_backtest(sym, tf, start=None, end=None) -> dict:
 
                 fee = ep * qty * (TAKER_FEE_BPS / 10000)
                 cost = qty * ep + fee
+
                 if cost > cash:
                     eq.append(cash)
                     continue
@@ -265,6 +261,7 @@ def run_backtest(sym, tf, start=None, end=None) -> dict:
                     "bars": 0,
                     "max_bars": max_bars,
                 }
+
                 cash -= cost
 
         eq.append(cash + (pos["qty_open"] * bar_close if pos else 0.0))
