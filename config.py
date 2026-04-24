@@ -2,7 +2,8 @@ import os
 
 BOT_VERSION = "v7 alpha"
 
-SYMBOLS = ["BTC/USDT", "ETH/USDT", "SOL/USDT"]
+# BTC runs the trend engine. Alts run the mean-reversion engine.
+SYMBOLS = ["BTC/USDT", "ETH/USDT", "BNB/USDT", "LINK/USDT", "AVAX/USDT", "SOL/USDT"]
 
 CAPITAL = float(os.getenv("CAPITAL", 100000))
 RISK = float(os.getenv("RISK", 0.005))
@@ -16,7 +17,7 @@ CANDLE_LIMIT = int(os.getenv("CANDLE_LIMIT", 200))
 
 ALLOWED_REGIMES = {
     r.strip().lower()
-    for r in os.getenv("ALLOWED_REGIMES", "trend").split(",")
+    for r in os.getenv("ALLOWED_REGIMES", "trend,mean_reversion").split(",")
     if r.strip()
 }
 
@@ -27,8 +28,11 @@ BOT_THREAD_ENABLED = os.getenv("BOT_THREAD_ENABLED", "false").strip().lower() in
 
 ALLOCATION = {
     "BTC/USDT": float(os.getenv("BTC_ALLOCATION", 0.40)),
-    "ETH/USDT": float(os.getenv("ETH_ALLOCATION", 0.30)),
-    "SOL/USDT": float(os.getenv("SOL_ALLOCATION", 0.30)),
+    "ETH/USDT": float(os.getenv("ETH_ALLOCATION", 0.18)),
+    "BNB/USDT": float(os.getenv("BNB_ALLOCATION", 0.10)),
+    "LINK/USDT": float(os.getenv("LINK_ALLOCATION", 0.10)),
+    "AVAX/USDT": float(os.getenv("AVAX_ALLOCATION", 0.12)),
+    "SOL/USDT": float(os.getenv("SOL_ALLOCATION", 0.10)),
 }
 
 DB_URL = os.getenv("DATABASE_URL")
