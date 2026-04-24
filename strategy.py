@@ -84,8 +84,9 @@ def generate_signal_trend_btc(df_ltf, df_htf, symbol):
     htf = df_htf.iloc[-2]
 
     body = abs(float(cur["close"] - cur["open"]))
-    body_ok = body >= float(cur["rolling_body"]) * 1.05 if pd.notna(cur["rolling_body"]) else False
-    atr_ok = float(cur["atr"]) > float(cur["close"]) * 0.0025 if pd.notna(cur["atr"]) else False
+    
+    body_ok = body >= float(cur["rolling_body"]) * 1.15 if pd.notna(cur["rolling_body"]) else False
+    atr_ok = float(cur["atr"]) > float(cur["close"]) * 0.0035 if pd.notna(cur["atr"]) else False
 
     htf_up = htf["close"] > htf["ema200"] and htf["ema20"] > htf["ema50"]
     ltf_up = cur["ema20"] > cur["ema50"]
@@ -109,15 +110,15 @@ def generate_signal_trend_btc(df_ltf, df_htf, symbol):
                 side="LONG",
                 entry_price=entry,
                 stop_loss=stop,
-                take_profit=entry + risk * 2.2,
+                take_profit=entry + risk * 2.8,
                 symbol=symbol,
                 strategy="btc_trend_v3",
                 regime="trend",
                 stop_loss_pct=risk / entry,
-                take_profit_pct=(risk * 2.2) / entry,
-                secondary_take_profit_pct=(risk * 4.0) / entry,
-                tp1_close_fraction=0.25,
-                tp2_close_fraction=0.75,
+                take_profit_pct=(risk * 2.8) / entry,
+                secondary_take_profit_pct=(risk * 5.0) / entry,
+                tp1_close_fraction=0.15,
+                tp2_close_fraction=0.85,
             )
 
     htf_down = htf["close"] < htf["ema200"] and htf["ema20"] < htf["ema50"]
@@ -140,15 +141,15 @@ def generate_signal_trend_btc(df_ltf, df_htf, symbol):
                 side="SHORT",
                 entry_price=entry,
                 stop_loss=stop,
-                take_profit=entry - risk * 2.2,
+                take_profit=entry - risk * 2.8,
                 symbol=symbol,
                 strategy="btc_trend_v3",
                 regime="trend",
                 stop_loss_pct=risk / entry,
-                take_profit_pct=(risk * 2.2) / entry,
-                secondary_take_profit_pct=(risk * 4.0) / entry,
-                tp1_close_fraction=0.25,
-                tp2_close_fraction=0.75,
+                take_profit_pct=(risk * 2.8) / entry,
+                secondary_take_profit_pct=(risk * 5.0) / entry,
+                tp1_close_fraction=0.15,
+                tp2_close_fraction=0.85,
             )
 
     return None
