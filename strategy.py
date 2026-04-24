@@ -85,8 +85,9 @@ def generate_signal_trend_btc(df_ltf, df_htf, symbol):
 
     body = abs(float(cur["close"] - cur["open"]))
     
-    body_ok = body >= float(cur["rolling_body"]) * 1.15 if pd.notna(cur["rolling_body"]) else False
-    atr_ok = float(cur["atr"]) > float(cur["close"]) * 0.0035 if pd.notna(cur["atr"]) else False
+    body_ok = body >= float(cur["rolling_body"]) * 1.25 if pd.notna(cur["rolling_body"]) else False
+    atr_ok = float(cur["atr"]) > float(cur["close"]) * 0.0045 if pd.notna(cur["atr"]) else False
+
 
     htf_up = htf["close"] > htf["ema200"] and htf["ema20"] > htf["ema50"]
     ltf_up = cur["ema20"] > cur["ema50"]
