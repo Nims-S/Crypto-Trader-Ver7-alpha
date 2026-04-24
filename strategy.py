@@ -31,6 +31,10 @@ def ema(series, span):
     return series.ewm(span=span, adjust=False).mean()
 
 
+def _has_core_indicators(df: pd.DataFrame) -> bool:
+    return df is not None and not df.empty and all(c in df.columns for c in ("atr", "rolling_body", "ema20", "ema50", "ema200"))
+
+
 def compute_indicators(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
 
@@ -45,14 +49,17 @@ def compute_indicators(df: pd.DataFrame) -> pd.DataFrame:
         (df["low"] - prev_close).abs()
     ], axis=1).max(axis=1)
     df["atr"] = tr.rolling(14).mean()
-
-    df["rolling_body"] = (df["close"] - df["open"]).abs().rolling(20).mean()
-
+    df["rolling_body"] = (df["close"] - df["open"] ).abs().rolling(20).mean()
     df["ema20"] = ema(df["close"], 20)
     df["ema50"] = ema(df["close"], 50)
     df["ema200"] = ema(df["close"], 200)
-
     return df
+
+
+def _prepare(df: pd.DataFrame) -> pd.DataFrame:
+    if df is None or df.empty:
+        return df
+    return df if _has_core_indicators(df) else compute_indicators(df)
 
 
 def _swing_low(df, n=20):
@@ -69,8 +76,8 @@ def generate_signal_trend_btc(df_ltf, df_htf, symbol):
     if df_ltf is None or df_htf is None or len(df_ltf) < 80 or len(df_htf) < 80:
         return None
 
-    df_ltf = compute_indicators(df_ltf)
-    df_htf = compute_indicators(df_htf)
+    df_ltf = _prepare(df_ltf)
+    df_htf = _prepare(df_htf)
 
     cur = df_ltf.iloc[-1]
     prev = df_ltf.iloc[-2]
@@ -80,13 +87,11 @@ def generate_signal_trend_btc(df_ltf, df_htf, symbol):
     body_ok = body >= float(cur["rolling_body"]) * 1.05 if pd.notna(cur["rolling_body"]) else False
     atr_ok = float(cur["atr"]) > float(cur["close"]) * 0.0015 if pd.notna(cur["atr"]) else False
 
-    # LONG SETUP
     htf_up = htf["close"] > htf["ema200"] and htf["ema20"] > htf["ema50"]
     ltf_up = cur["ema20"] > cur["ema50"]
 
     pullback = cur["low"] <= cur["ema20"] * 1.01
     reclaim = cur["close"] > cur["ema20"] and prev["close"] <= prev["ema20"]
-
     breakout = cur["close"] > df_ltf["high"].iloc[-10:].max()
 
     if htf_up and ltf_up and body_ok and atr_ok and (pullback and reclaim or breakout):
@@ -109,13 +114,11 @@ def generate_signal_trend_btc(df_ltf, df_htf, symbol):
                 tp2_close_fraction=0.7,
             )
 
-    # SHORT SETUP
     htf_down = htf["close"] < htf["ema200"] and htf["ema20"] < htf["ema50"]
     ltf_down = cur["ema20"] < cur["ema50"]
 
     pullback_s = cur["high"] >= cur["ema20"] * 0.99
     reclaim_s = cur["close"] < cur["ema20"] and prev["close"] >= prev["ema20"]
-
     breakdown = cur["close"] < df_ltf["low"].iloc[-10:].min()
 
     if htf_down and ltf_down and body_ok and atr_ok and (pullback_s and reclaim_s or breakdown):
@@ -147,10 +150,9 @@ def generate_signal_reclaim_alt(df_ltf, symbol):
     if df_ltf is None or len(df_ltf) < 50:
         return None
 
-    df_ltf = compute_indicators(df_ltf)
+    df_ltf = _prepare(df_ltf)
     cur = df_ltf.iloc[-1]
 
-    range_high = df_ltf["high"].iloc[-20:].max()
     range_low = df_ltf["low"].iloc[-20:].min()
 
     if cur["low"] < range_low and cur["close"] > range_low:
