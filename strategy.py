@@ -8,6 +8,8 @@ import pandas as pd
 @dataclass
 class StrategyState:
     trades_this_week: int = 0
+    allow_shorts: bool = False
+    min_atr_pct: float = 0.0035
 
 
 @dataclass
@@ -79,7 +81,13 @@ def _swing_high(df, n=20):
     return float(df["high"].iloc[-n:].max())
 
 
-def generate_signal_trend_btc(df_ltf, df_htf, symbol):
+def _atr_pct(cur: pd.Series) -> float:
+    close = float(cur.get("close", 0.0) or 0.0)
+    atr = float(cur.get("atr", 0.0) or 0.0)
+    return atr / close if close else 0.0
+
+
+def generate_signal_trend_btc(df_ltf, df_htf, symbol, state=None):
     if df_ltf is None or df_htf is None or len(df_ltf) < 80 or len(df_htf) < 80:
         return None
 
@@ -93,6 +101,7 @@ def generate_signal_trend_btc(df_ltf, df_htf, symbol):
     body = abs(float(cur["close"] - cur["open"]))
     body_ok = body >= float(cur["rolling_body"]) * 1.10 if pd.notna(cur["rolling_body"]) else False
     atr_ok = float(cur["atr"]) > float(cur["close"]) * 0.0030 if pd.notna(cur["atr"]) else False
+    vol_ok = _atr_pct(cur) >= float(getattr(state, "min_atr_pct", 0.0035))
 
     htf_up = htf["close"] > htf["ema200"] and htf["ema20"] > htf["ema50"]
     ltf_up = cur["ema20"] > cur["ema50"]
@@ -108,7 +117,7 @@ def generate_signal_trend_btc(df_ltf, df_htf, symbol):
     momentum = (cur["close"] - prev["close"]) / prev["close"] if prev["close"] != 0 else 0
     momentum_ok = momentum > 0.0025
 
-    if htf_up and ltf_up and trend_ok_long and body_ok and atr_ok and entry_condition and momentum_ok:
+    if htf_up and ltf_up and trend_ok_long and body_ok and atr_ok and vol_ok and entry_condition and momentum_ok:
         entry = float(cur["close"])
         recent = df_ltf.iloc[:-1]
         stop = min(_swing_low(recent, 20), float(cur["ema50"])) * 0.998
@@ -121,7 +130,7 @@ def generate_signal_trend_btc(df_ltf, df_htf, symbol):
                 stop_loss=stop,
                 take_profit=entry + risk * 3.0,
                 symbol=symbol,
-                strategy="btc_trend_v3",
+                strategy="btc_trend_v4",
                 regime="trend",
                 stop_loss_pct=risk / entry,
                 take_profit_pct=(risk * 3.0) / entry,
@@ -129,6 +138,10 @@ def generate_signal_trend_btc(df_ltf, df_htf, symbol):
                 tp1_close_fraction=0.20,
                 tp2_close_fraction=0.80,
             )
+
+    allow_shorts = bool(getattr(state, "allow_shorts", False))
+    if not allow_shorts:
+        return None
 
     htf_down = htf["close"] < htf["ema200"] and htf["ema20"] < htf["ema50"]
     ltf_down = cur["ema20"] < cur["ema50"]
@@ -141,7 +154,7 @@ def generate_signal_trend_btc(df_ltf, df_htf, symbol):
     momentum_s = (prev["close"] - cur["close"]) / prev["close"] if prev["close"] != 0 else 0
     momentum_ok_s = momentum_s > 0.0025
 
-    if htf_down and ltf_down and trend_ok_short and body_ok and atr_ok and entry_condition_s and momentum_ok_s:
+    if htf_down and ltf_down and trend_ok_short and body_ok and atr_ok and vol_ok and entry_condition_s and momentum_ok_s:
         entry = float(cur["close"])
         stop = max(_swing_high(df_ltf, 20), float(cur["ema50"])) * 1.002
         risk = stop - entry
@@ -153,7 +166,7 @@ def generate_signal_trend_btc(df_ltf, df_htf, symbol):
                 stop_loss=stop,
                 take_profit=entry - risk * 3.0,
                 symbol=symbol,
-                strategy="btc_trend_v3",
+                strategy="btc_trend_v4",
                 regime="trend",
                 stop_loss_pct=risk / entry,
                 take_profit_pct=(risk * 3.0) / entry,
@@ -199,5 +212,5 @@ def generate_signal_reclaim_alt(df_ltf, symbol):
 
 def generate_signal(df, state=None, symbol=None, df_htf=None):
     if symbol == "BTC/USDT":
-        return generate_signal_trend_btc(df, df_htf, symbol)
+        return generate_signal_trend_btc(df, df_htf, symbol, state=state)
     return generate_signal_reclaim_alt(df, symbol)
