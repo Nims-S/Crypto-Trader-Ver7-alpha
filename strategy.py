@@ -41,10 +41,30 @@ def ema(series, span):
     return series.ewm(span=span, adjust=False).mean()
 
 
-def add_indicators(df: pd.DataFrame):
+def compute_indicators(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
+
+    # Ensure timestamp index if present
+    if "timestamp" in df.columns:
+        df["timestamp"] = pd.to_datetime(df["timestamp"], utc=True)
+        df = df.set_index("timestamp")
+
+    # ATR
+    prev_close = df["close"].shift(1)
+    tr = pd.concat([
+        df["high"] - df["low"],
+        (df["high"] - prev_close).abs(),
+        (df["low"] - prev_close).abs()
+    ], axis=1).max(axis=1)
+    df["atr"] = tr.rolling(14).mean()
+
+    # Body size
+    df["rolling_body"] = (df["close"] - df["open"]).abs().rolling(20).mean()
+
+    # EMAs
     df["ema20"] = ema(df["close"], 20)
     df["ema50"] = ema(df["close"], 50)
+
     return df
 
 
@@ -56,15 +76,12 @@ def generate_signal_trend_btc(df_ltf, df_htf, symbol):
     if df_ltf is None or df_htf is None or len(df_ltf) < 50 or len(df_htf) < 50:
         return None
 
-    df_ltf = add_indicators(df_ltf)
-    df_htf = add_indicators(df_htf)
+    df_ltf = compute_indicators(df_ltf)
+    df_htf = compute_indicators(df_htf)
 
     cur = df_ltf.iloc[-1]
 
-    # HTF bias
     htf_trend_up = df_htf.iloc[-1]["ema20"] > df_htf.iloc[-1]["ema50"]
-
-    # LTF continuation
     trend_up = cur["ema20"] > cur["ema50"]
 
     if not (htf_trend_up and trend_up):
@@ -104,13 +121,14 @@ def generate_signal_reclaim_alt(df_ltf, symbol):
     if df_ltf is None or len(df_ltf) < 50:
         return None
 
+    df_ltf = compute_indicators(df_ltf)
+
     cur = df_ltf.iloc[-1]
 
     lookback = 20
     range_high = df_ltf["high"].iloc[-lookback:].max()
     range_low = df_ltf["low"].iloc[-lookback:].min()
 
-    # sweep below range
     if cur["low"] < range_low and cur["close"] > range_low:
         entry = float(cur["close"])
         stop = float(cur["low"])
@@ -147,11 +165,4 @@ def generate_signal_reclaim_alt(df_ltf, symbol):
 def generate_signal(df, state=None, symbol=None, df_htf=None):
     if symbol == "BTC/USDT":
         return generate_signal_trend_btc(df, df_htf, symbol)
-    else:
-        return generate_signal_reclaim_alt(df, symbol)
-
-
-# compatibility
-
-def compute_indicators(df: pd.DataFrame) -> pd.DataFrame:
-    return df
+    return generate_signal_reclaim_alt(df, symbol)
