@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
 
 import pandas as pd
 
@@ -118,15 +117,17 @@ def _atr_pct(cur: pd.Series) -> float:
     return atr / close if close else 0.0
 
 
-def _engine_regime(df: pd.DataFrame) -> str:
-    """Make the price action engine drive a clean regime check."""
-    prepared = ENGINE.get_swing_highs_lows(df)
-    return ENGINE.determine_regime(prepared)
+def _prepare_engine_frame(df: pd.DataFrame) -> pd.DataFrame:
+    """Compute swings once and reuse the marked frame downstream."""
+    return ENGINE.prepare(df)
 
 
-def _engine_bullish_trigger(df: pd.DataFrame) -> bool:
-    prepared = ENGINE.get_swing_highs_lows(df)
-    return ENGINE.check_bullish_trigger(prepared)
+def _engine_regime_marked(df_marked: pd.DataFrame) -> str:
+    return ENGINE.determine_regime(df_marked)
+
+
+def _engine_bullish_trigger_marked(df_marked: pd.DataFrame) -> bool:
+    return ENGINE.check_bullish_trigger(df_marked)
 
 
 # ─────────────────────────────────────────────────────────────
@@ -142,12 +143,13 @@ def generate_signal_trend_btc(df_ltf, df_htf, symbol, state=None):
     if df_ltf is None or df_htf is None:
         return None
 
-    # Engine gates the market first.
-    if _engine_regime(df_htf) != "BULL_TREND":
+    df_ltf_eng = _prepare_engine_frame(df_ltf)
+    df_htf_eng = _prepare_engine_frame(df_htf)
+
+    if _engine_regime_marked(df_htf_eng) != "BULL_TREND":
         return None
 
-    # Trigger is the entry confirmation.
-    if not _engine_bullish_trigger(df_ltf):
+    if not _engine_bullish_trigger_marked(df_ltf_eng):
         return None
 
     cur = df_ltf.iloc[-1]
@@ -224,8 +226,9 @@ def generate_signal_reclaim_alt(df_ltf, symbol, state=None):
     if df_ltf is None or df_ltf.empty:
         return None
 
-    # Avoid fading strong bearish trends.
-    regime = _engine_regime(df_ltf)
+    df_ltf_eng = _prepare_engine_frame(df_ltf)
+
+    regime = _engine_regime_marked(df_ltf_eng)
     if regime == "BEAR_TREND":
         return None
 
@@ -235,10 +238,9 @@ def generate_signal_reclaim_alt(df_ltf, symbol, state=None):
     lookback = 20
     range_low = df_ltf["low"].iloc[-lookback:].min()
 
-    # Sweep and reclaim long setup.
     sweep_long = cur["low"] < range_low and cur["close"] > range_low
     reclaim_long = cur["close"] > prev["open"] and cur["close"] > prev["close"]
-    bullish_trigger = _engine_bullish_trigger(df_ltf)
+    bullish_trigger = _engine_bullish_trigger_marked(df_ltf_eng)
 
     if sweep_long and (reclaim_long or bullish_trigger):
         entry = float(cur["close"])
