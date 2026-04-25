@@ -1,8 +1,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Optional
 
 import pandas as pd
+
+from price_action_engine import PriceActionEngine
+
+ENGINE = PriceActionEngine()
 
 
 @dataclass
@@ -111,12 +116,37 @@ def _atr_pct(cur: pd.Series) -> float:
     return atr / close if close else 0.0
 
 
+def _engine_regime(df: pd.DataFrame) -> str:
+    """Make the price action engine drive a clean regime check."""
+    prepared = ENGINE.get_swing_highs_lows(df)
+    return ENGINE.determine_regime(prepared)
+
+
+def _engine_bullish_trigger(df: pd.DataFrame) -> bool:
+    prepared = ENGINE.get_swing_highs_lows(df)
+    return ENGINE.check_bullish_trigger(prepared)
+
+
+# ─────────────────────────────────────────────────────────────
+# BTC TREND ENGINE
+# ─────────────────────────────────────────────────────────────
+
 def generate_signal_trend_btc(df_ltf, df_htf, symbol, state=None):
     if df_ltf is None or df_htf is None or len(df_ltf) < 80 or len(df_htf) < 80:
         return None
 
     df_ltf = _prepare(df_ltf)
     df_htf = _prepare(df_htf)
+    if df_ltf is None or df_htf is None:
+        return None
+
+    # Engine gates the market first.
+    if _engine_regime(df_htf) != "BULL_TREND":
+        return None
+
+    # Trigger is the entry confirmation.
+    if not _engine_bullish_trigger(df_ltf):
+        return None
 
     cur = df_ltf.iloc[-1]
     prev = df_ltf.iloc[-2]
@@ -174,7 +204,71 @@ def generate_signal_trend_btc(df_ltf, df_htf, symbol, state=None):
     return None
 
 
+# ─────────────────────────────────────────────────────────────
+# ALT MEAN REVERSION ENGINE
+# ─────────────────────────────────────────────────────────────
+
+def generate_signal_reclaim_alt(df_ltf, symbol, state=None):
+    if df_ltf is None or len(df_ltf) < 80:
+        return None
+
+    df_ltf = _prepare(df_ltf)
+    if df_ltf is None or df_ltf.empty:
+        return None
+
+    # Avoid fading strong bearish trends.
+    regime = _engine_regime(df_ltf)
+    if regime == "BEAR_TREND":
+        return None
+
+    cur = df_ltf.iloc[-1]
+    prev = df_ltf.iloc[-2]
+
+    lookback = 20
+    range_high = df_ltf["high"].iloc[-lookback:].max()
+    range_low = df_ltf["low"].iloc[-lookback:].min()
+
+    # Sweep and reclaim long setup.
+    sweep_long = cur["low"] < range_low and cur["close"] > range_low
+    reclaim_long = cur["close"] > prev["open"] and cur["close"] > prev["close"]
+    bullish_trigger = _engine_bullish_trigger(df_ltf)
+
+    if sweep_long and (reclaim_long or bullish_trigger):
+        entry = float(cur["close"])
+        stop = float(cur["low"])
+        risk = entry - stop
+
+        if risk <= 0:
+            return None
+
+        tp1 = entry + risk * 0.8
+        tp2 = entry + risk * 1.4
+
+        return Signal(
+            side="LONG",
+            entry_price=entry,
+            stop_loss=stop,
+            take_profit=tp1,
+            symbol=symbol,
+            strategy="alt_reclaim_v7",
+            regime="mean_reversion",
+            stop_loss_pct=risk / entry,
+            take_profit_pct=(tp1 - entry) / entry,
+            secondary_take_profit_pct=(tp2 - entry) / entry,
+            tp1_close_fraction=0.6,
+            tp2_close_fraction=0.4,
+            be_trigger_rr=0.6,
+            max_bars_override=12,
+        )
+
+    return None
+
+
+# ─────────────────────────────────────────────────────────────
+# ROUTER
+# ─────────────────────────────────────────────────────────────
+
 def generate_signal(df, state=None, symbol=None, df_htf=None):
     if symbol == "BTC/USDT":
         return generate_signal_trend_btc(df, df_htf, symbol, state=state)
-    return None
+    return generate_signal_reclaim_alt(df, symbol, state=state)
