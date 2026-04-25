@@ -87,7 +87,8 @@ def load_position(cur, symbol: str):
             regime, confidence, direction,
             tp1_hit, tp2_hit, tp3_hit, strategy,
             stop_loss_pct, take_profit_pct, secondary_take_profit_pct,
-            trail_pct, trail_atr_mult, tp1_close_fraction, tp2_close_fraction, tp3_close_fraction
+            trail_pct, trail_atr_mult, tp1_close_fraction, tp2_close_fraction, tp3_close_fraction,
+            opened_at
         FROM positions
         WHERE symbol=%s FOR UPDATE SKIP LOCKED
         """,
@@ -120,12 +121,16 @@ def load_position(cur, symbol: str):
         "tp1_close_fraction": row[20],
         "tp2_close_fraction": row[21],
         "tp3_close_fraction": row[22],
+        "opened_at": row[23],
     }
 
 
 def build_position_state(position):
     if not position:
         return None
+    opened_at = position.get("opened_at")
+    if hasattr(opened_at, "isoformat"):
+        opened_at = opened_at.isoformat()
     return {
         "entry_price": position["entry"],
         "stop_loss": position["sl"],
@@ -135,6 +140,7 @@ def build_position_state(position):
         "size": position["size"],
         "original_size": position.get("original_size"),
         "strategy": position["strategy"],
+        "opened_at": opened_at,
     }
 
 
