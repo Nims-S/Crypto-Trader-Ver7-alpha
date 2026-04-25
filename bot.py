@@ -47,6 +47,18 @@ _candle_cache: dict[str, tuple[float, pd.DataFrame]] = {}
 CANDLE_CACHE_TTL = 60
 
 
+def _htf_timeframe_for_symbol(symbol: str, ltf_timeframe: str = DEFAULT_TIMEFRAME) -> str:
+    """Keep HTF strictly above LTF so regime detection actually means something."""
+    if symbol == "BTC/USDT":
+        if ltf_timeframe in {"1m", "3m", "5m", "15m", "30m", "1h", "2h", "4h"}:
+            return "1d"
+        return "1h"
+
+    if ltf_timeframe in {"1m", "3m", "5m", "15m", "30m", "1h"}:
+        return "4h"
+    return "1d"
+
+
 def fetch_historical_data(symbol: str, timeframe: str = DEFAULT_TIMEFRAME) -> pd.DataFrame:
     key = f"{symbol}_{timeframe}"
     cached_ts, cached_df = _candle_cache.get(key, (0.0, pd.DataFrame()))
@@ -219,8 +231,7 @@ def run_bot():
                     update_asset(symbol=symbol, regime="unknown", strategy="waiting_for_close", signal=None, position=build_position_state(position))
                     continue
 
-                # Fetch HTF for mode routing
-                htf_tf = "1h" if symbol == "BTC/USDT" else "15m"
+                htf_tf = _htf_timeframe_for_symbol(symbol, DEFAULT_TIMEFRAME)
                 df_htf = fetch_historical_data(symbol, timeframe=htf_tf)
 
                 candle_ts = closed_df.iloc[-1]["timestamp"]
