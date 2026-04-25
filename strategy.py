@@ -155,31 +155,53 @@ def generate_signal_trend_btc(df_ltf, df_htf, symbol, state=None):
     htf_prev = df_htf.iloc[-3]
 
     body = abs(float(cur["close"] - cur["open"]))
-    body_ok = body >= float(cur["rolling_body"]) * 0.90 if pd.notna(cur["rolling_body"]) else False
-    atr_ok = float(cur["atr"]) > float(cur["close"]) * 0.0025 if pd.notna(cur["atr"]) else False
+    body_ok = body >= float(cur["rolling_body"]) * 0.80 if pd.notna(cur["rolling_body"]) else True
+    atr_ok = float(cur["atr"]) > float(cur["close"]) * 0.0020 if pd.notna(cur["atr"]) else True
     min_atr_pct = float(getattr(state, "min_atr_pct", 0.0032))
     min_adx = float(getattr(state, "min_adx", 18.0))
     vol_ok = _atr_pct(cur) >= min_atr_pct
-    adx_ok = float(cur["adx"]) >= min_adx if pd.notna(cur["adx"]) else False
+    adx_ok = float(cur["adx"]) >= min_adx if pd.notna(cur["adx"]) else True
 
     htf_up = htf["close"] > htf["ema200"] and htf["ema20"] > htf["ema50"]
-    htf_slope_up = htf["ema20"] > htf_prev["ema20"]
-    ltf_up = cur["ema20"] > cur["ema50"]
-    trend_ok_long = (htf["ema20"] - htf["ema50"]) / htf["close"] > 0.0020
+    htf_slope_up = htf["ema20"] >= htf_prev["ema20"]
+    ltf_up = cur["ema20"] >= cur["ema50"]
+    trend_ok_long = (htf["ema20"] - htf["ema50"]) / htf["close"] > 0.0015
 
-    pullback = cur["low"] <= cur["ema20"] * 1.01
+    pullback = cur["low"] <= cur["ema20"] * 1.015
     reclaim = cur["close"] > cur["ema20"] and prev["close"] <= prev["ema20"]
     prev_highs = df_ltf["high"].iloc[-11:-1]
     breakout = cur["close"] > prev_highs.max()
     momentum = (cur["close"] - prev["close"]) / prev["close"] if prev["close"] != 0 else 0.0
-    momentum_ok = momentum > 0.0015
+    momentum_ok = momentum > 0.0008
 
     bullish_trigger = _engine_bullish_trigger_marked(df_ltf_eng)
     regime_bias_ok = htf_regime in {"BULL_TREND", "RANGING", "UNKNOWN"}
-    entry_ok = breakout or (pullback and reclaim) or bullish_trigger
-    runner_mode = adx_ok and float(cur["adx"]) >= 26 and momentum > 0.0035 and trend_ok_long
+    strong_entry_ok = breakout or (pullback and reclaim) or bullish_trigger
+    fallback_entry_ok = htf_up and ltf_up and (breakout or pullback or bullish_trigger)
+    runner_mode = adx_ok and float(cur["adx"]) >= 24 and momentum > 0.0030 and trend_ok_long
 
-    if htf_up and ltf_up and trend_ok_long and htf_slope_up and body_ok and atr_ok and vol_ok and adx_ok and regime_bias_ok and entry_ok and momentum_ok:
+    if htf_up and ltf_up and trend_ok_long and htf_slope_up and vol_ok and regime_bias_ok and momentum_ok and (strong_entry_ok or fallback_entry_ok):
+        if not (body_ok and atr_ok and adx_ok):
+            confidence = 0.35
+            tp_mult = 2.2
+            tp2_mult = 4.5
+            tp3_mult = 6.5
+            tp1_frac = 0.15
+            tp2_frac = 0.85
+            be_rr = 1.3
+            max_bars = 60
+            size_mult = 0.8
+        else:
+            confidence = 0.5
+            tp_mult = 3.5 if runner_mode else 3.0
+            tp2_mult = 10.0 if runner_mode else 8.0
+            tp3_mult = 12.0 if runner_mode else 9.0
+            tp1_frac = 0.05 if runner_mode else 0.10
+            tp2_frac = 0.95 if runner_mode else 0.90
+            be_rr = 2.4 if runner_mode else 1.8
+            max_bars = 120 if runner_mode else 72
+            size_mult = 1.0
+
         entry = float(cur["close"])
         recent = df_ltf.iloc[:-1]
         stop = min(_swing_low(recent, 20), float(cur["ema50"])) * 0.998
@@ -190,23 +212,24 @@ def generate_signal_trend_btc(df_ltf, df_htf, symbol, state=None):
                 side="LONG",
                 entry_price=entry,
                 stop_loss=stop,
-                take_profit=entry + risk * (3.5 if runner_mode else 3.0),
+                take_profit=entry + risk * tp_mult,
                 symbol=symbol,
-                strategy="btc_trend_v8",
+                strategy="btc_trend_v9",
                 regime="trend",
+                confidence=confidence,
                 stop_loss_pct=risk / entry,
-                take_profit_pct=(risk * (2.5 if runner_mode else 3.0)) / entry,
-                secondary_take_profit_pct=(risk * (10.0 if runner_mode else 8.0)) / entry,
-                tp3_pct=(risk * (12.0 if runner_mode else 9.0)) / entry,
+                take_profit_pct=(risk * tp_mult) / entry,
+                secondary_take_profit_pct=(risk * tp2_mult) / entry,
+                tp3_pct=(risk * tp3_mult) / entry,
                 tp3_close_fraction=0.0,
                 trail_pct=0.0,
                 trail_atr_mult=0.0,
-                tp1_close_fraction=0.05 if runner_mode else 0.10,
-                tp2_close_fraction=0.95 if runner_mode else 0.90,
-                be_trigger_rr=2.4 if runner_mode else 1.8,
-                max_bars_override=120 if runner_mode else 72,
+                tp1_close_fraction=tp1_frac,
+                tp2_close_fraction=tp2_frac,
+                be_trigger_rr=be_rr,
+                max_bars_override=max_bars,
                 cooldown_bars=0,
-                size_multiplier=1.0,
+                size_multiplier=size_mult,
             )
 
     return None
