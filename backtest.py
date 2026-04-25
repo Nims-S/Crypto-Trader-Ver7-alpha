@@ -4,6 +4,7 @@ import argparse
 import json
 import time
 from dataclasses import dataclass
+from pathlib import Path
 
 import ccxt
 import numpy as np
@@ -13,6 +14,8 @@ from strategy import StrategyState, compute_indicators, generate_signal
 
 
 exchange = ccxt.binance({"enableRateLimit": True, "timeout": 20000})
+CACHE_DIR = Path(".backtest_cache")
+CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
 TAKER_FEE_BPS = 6.0
 MAKER_FEE_BPS = 2.0
@@ -58,7 +61,6 @@ class Position:
     open_ts: str = ""
 
 
-
 def _to_ms(v):
     if not v:
         return None
@@ -67,10 +69,8 @@ def _to_ms(v):
     return int(ts.timestamp() * 1000)
 
 
-
 def _sig(s, k, d=None):
     return getattr(s, k, d) if s is not None else d
-
 
 
 def _slip(p, atr, c, side):
@@ -79,11 +79,9 @@ def _slip(p, atr, c, side):
     return p * (1 + sl) if side == "LONG" else p * (1 - sl)
 
 
-
 def _pnl(entry: float, exit_p: float, qty: float, side: str, fee_bps: float) -> float:
     fee = exit_p * qty * (fee_bps / 10000)
     return (exit_p - entry) * qty - fee if side == "LONG" else (entry - exit_p) * qty - fee
-
 
 
 def _close_leg(cash: float, pos: Position, exit_p: float, qty: float, result: str, trades: list):
@@ -107,7 +105,6 @@ def _close_leg(cash: float, pos: Position, exit_p: float, qty: float, result: st
     return (cash, None) if pos.qty_open <= 1e-10 else (cash, pos)
 
 
-
 def _trail_stop(pos: Position, bar_close: float, bar_atr: float):
     if not pos.tp1_hit:
         return
@@ -127,8 +124,23 @@ def _trail_stop(pos: Position, bar_close: float, bar_atr: float):
         pos.sl = min(pos.sl, trail)
 
 
+def _cache_path(sym: str, tf: str, since: int | None, until: int | None) -> Path:
+    safe_sym = sym.replace("/", "_")
+    since_s = str(since) if since is not None else "none"
+    until_s = str(until) if until is not None else "none"
+    return CACHE_DIR / f"{safe_sym}_{tf}_{since_s}_{until_s}.csv"
 
-def fetch_ohlcv_full(sym, tf, since=None, until=None) -> pd.DataFrame:
+
+def fetch_ohlcv_full(sym, tf, since=None, until=None, use_cache=True) -> pd.DataFrame:
+    cache_file = _cache_path(sym, tf, since, until)
+    if use_cache and cache_file.exists():
+        df = pd.read_csv(cache_file)
+        if not df.empty:
+            df["timestamp"] = pd.to_datetime(df["timestamp"], utc=True)
+            df = df.set_index("timestamp").sort_index()
+            return compute_indicators(df.reset_index()).set_index("timestamp").sort_index()
+        return pd.DataFrame()
+
     rows = []
     cur = since
 
@@ -151,15 +163,16 @@ def fetch_ohlcv_full(sym, tf, since=None, until=None) -> pd.DataFrame:
     if not isinstance(df.index, pd.DatetimeIndex):
         df["timestamp"] = pd.to_datetime(df["timestamp"], utc=True)
         df = df.set_index("timestamp").sort_index()
-    return df
 
+    if use_cache:
+        df.reset_index().to_csv(cache_file, index=False)
+    return df
 
 
 def _htf_timeframe_for_symbol(symbol: str, ltf_timeframe: str) -> str:
     if symbol == "BTC/USDT":
         return "1d" if ltf_timeframe in {"15m", "30m", "1h", "2h", "4h"} else "1h"
     return "4h" if ltf_timeframe in {"15m", "30m", "1h"} else "1d"
-
 
 
 def _prepare_signal_levels(sig, entry: float, sl: float):
@@ -193,16 +206,25 @@ def _prepare_signal_levels(sig, entry: float, sl: float):
     return tp1, tp2, tp3, be_trigger, tp1_qty_frac, tp2_qty_frac, tp3_qty_frac
 
 
+def run_backtest(sym, tf, start=None, end=None, allow_shorts=False, max_bars: int = 0, use_cache: bool = True) -> dict:
+    since = _to_ms(start)
+    until = _to_ms(end)
 
-def run_backtest(sym, tf, start=None, end=None, allow_shorts=False) -> dict:
-    df = fetch_ohlcv_full(sym, tf, _to_ms(start), _to_ms(end))
+    df = fetch_ohlcv_full(sym, tf, since, until, use_cache=use_cache)
     if df.empty:
         return {"error": f"no data returned for {sym} on {tf}"}
 
     htf_tf = _htf_timeframe_for_symbol(sym, tf)
-    df_htf = fetch_ohlcv_full(sym, htf_tf, _to_ms(start), _to_ms(end))
+    df_htf = fetch_ohlcv_full(sym, htf_tf, since, until, use_cache=use_cache)
     if df_htf.empty:
         return {"error": f"no HTF data returned for {sym} on {htf_tf}"}
+
+    if max_bars and max_bars > 0:
+        warmup = min(300, len(df) - 1)
+        df = df.iloc[-(max_bars + warmup):].copy()
+        df_htf = df_htf[df_htf.index >= df.index.min()].copy()
+        if df_htf.empty:
+            return {"error": f"HTF data trimmed away for {sym} on {htf_tf}"}
 
     htf_pos = np.searchsorted(df_htf.index.values, df.index.values, side="right") - 1
 
@@ -302,13 +324,16 @@ def run_backtest(sym, tf, start=None, end=None, allow_shorts=False) -> dict:
 
                 tp1, tp2, tp3, be_trigger, tp1_frac, tp2_frac, tp3_frac = _prepare_signal_levels(sig, ep, sl)
                 regime = getattr(sig, "regime", "trend")
-                max_bars = _sig(sig, "max_bars_override", 0) or MAX_BARS_BY_REGIME.get(regime, 36)
+                if max_bars and max_bars > 0:
+                    max_hold = max_bars
+                else:
+                    max_hold = _sig(sig, "max_bars_override", 0) or MAX_BARS_BY_REGIME.get(regime, 36)
                 size_multiplier = _sig(sig, "size_multiplier", 1.0) or 1.0
                 trail_pct = _sig(sig, "trail_pct", 0.0) or 0.0
                 trail_atr_mult = _sig(sig, "trail_atr_mult", DEFAULT_TRAIL_ATR_MULT) or DEFAULT_TRAIL_ATR_MULT
 
-                base_qty = (equity * RISK_PER_TRADE) / sl_dist
-                qty = min(base_qty * size_multiplier, (equity * MAX_NOTIONAL_FRAC) / ep)
+                base_qty = (cash * RISK_PER_TRADE) / sl_dist
+                qty = min(base_qty * size_multiplier, (cash * MAX_NOTIONAL_FRAC) / ep)
                 if qty <= 0:
                     eq.append(cash)
                     continue
@@ -319,12 +344,10 @@ def run_backtest(sym, tf, start=None, end=None, allow_shorts=False) -> dict:
                     eq.append(cash)
                     continue
 
-                # allocate leg quantities; TP3 consumes whatever remains unless the signal specifies otherwise
                 qty_tp1 = qty * tp1_frac
                 qty_tp2 = qty * tp2_frac
                 qty_tp3 = qty * tp3_frac if tp3_frac > 0 else max(qty - qty_tp1 - qty_tp2, 0.0)
 
-                # keep a small leftover buffer for the final exit when TP3 is absent
                 if tp3_frac <= 0 and qty_tp1 + qty_tp2 > qty:
                     qty_tp2 = max(qty - qty_tp1, 0.0)
                 elif tp3_frac > 0 and qty_tp1 + qty_tp2 + qty_tp3 > qty:
@@ -343,7 +366,7 @@ def run_backtest(sym, tf, start=None, end=None, allow_shorts=False) -> dict:
                     qty_tp2=qty_tp2,
                     qty_tp3=qty_tp3,
                     bars=0,
-                    max_bars=max_bars,
+                    max_bars=max_hold,
                     tp1_hit=False,
                     tp2_hit=False,
                     tp3_hit=False,
@@ -397,6 +420,8 @@ if __name__ == "__main__":
     ap.add_argument("--timeframe", default="1h")
     ap.add_argument("--start")
     ap.add_argument("--end")
+    ap.add_argument("--max-bars", type=int, default=0, help="Limit the tested window to the most recent N bars for faster iteration")
+    ap.add_argument("--no-cache", action="store_true", help="Disable OHLCV caching")
     ap.add_argument("--allow-shorts", action="store_true", help="Enable short trades")
     a = ap.parse_args()
-    print(json.dumps(run_backtest(a.symbol, a.timeframe, a.start, a.end, allow_shorts=a.allow_shorts), indent=2))
+    print(json.dumps(run_backtest(a.symbol, a.timeframe, a.start, a.end, allow_shorts=a.allow_shorts, max_bars=a.max_bars, use_cache=not a.no_cache), indent=2))
