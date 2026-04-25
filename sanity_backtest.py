@@ -121,7 +121,7 @@ def get_window(sym: str, tf: str, start=None, end=None, max_bars: int = 0):
     until = _to_ms(end)
     if since is None and max_bars > 0:
         lookback = max(max_bars + 300, 1200)
-        since = int(pd.Timestamp.utcnow().timestamp() * 1000) - lookback * _timeframe_to_ms(tf)
+        since = int(pd.Timestamp.now(tz="UTC").timestamp() * 1000) - lookback * _timeframe_to_ms(tf)
     return fetch_ohlcv_full(sym, tf, since, until, use_cache=True)
 
 
@@ -134,12 +134,13 @@ def signal_btc(df_ltf: pd.DataFrame, df_htf: pd.DataFrame):
     htf = df_htf.iloc[-1]
 
     htf_up = htf["close"] > htf["ema200"] and htf["ema20"] >= htf["ema50"]
-    ltf_up = cur["ema20"] >= cur["ema50"]
-    breakout = cur["close"] > df_ltf["high"].iloc[-21:-1].max()
+    ltf_up = cur["close"] > cur["ema50"] or cur["ema20"] >= cur["ema50"]
+    breakout = cur["close"] >= df_ltf["high"].iloc[-21:-1].max() * 0.995
     reclaim = cur["close"] > cur["ema20"] and prev["close"] <= prev["ema20"]
     momentum = ((cur["close"] - prev["close"]) / prev["close"]) if prev["close"] else 0.0
+    fallback_bias = cur["close"] > cur["ema200"] * 0.98 and ltf_up and momentum > -0.0005
 
-    if htf_up and ltf_up and (breakout or reclaim or momentum > 0.001):
+    if htf_up and (breakout or reclaim or momentum > 0.0 or fallback_bias):
         entry = float(cur["close"])
         stop = min(float(cur["ema50"]), float(df_ltf["low"].iloc[-20:].min())) * 0.998
         risk = entry - stop
