@@ -13,8 +13,8 @@ ENGINE = PriceActionEngine()
 class StrategyState:
     trades_this_week: int = 0
     allow_shorts: bool = False
-    min_atr_pct: float = 0.0038
-    min_adx: float = 20.0
+    min_atr_pct: float = 0.0032
+    min_adx: float = 18.0
 
 
 @dataclass
@@ -118,7 +118,6 @@ def _atr_pct(cur: pd.Series) -> float:
 
 
 def _prepare_engine_frame(df: pd.DataFrame) -> pd.DataFrame:
-    """Compute swings once and reuse the marked frame downstream."""
     return ENGINE.prepare(df)
 
 
@@ -146,7 +145,8 @@ def generate_signal_trend_btc(df_ltf, df_htf, symbol, state=None):
     df_ltf_eng = _prepare_engine_frame(df_ltf)
     df_htf_eng = _prepare_engine_frame(df_htf)
 
-    if _engine_regime_marked(df_htf_eng) != "BULL_TREND":
+    htf_regime = _engine_regime_marked(df_htf_eng)
+    if htf_regime == "BEAR_TREND":
         return None
 
     cur = df_ltf.iloc[-1]
@@ -155,32 +155,31 @@ def generate_signal_trend_btc(df_ltf, df_htf, symbol, state=None):
     htf_prev = df_htf.iloc[-3]
 
     body = abs(float(cur["close"] - cur["open"]))
-    body_ok = body >= float(cur["rolling_body"]) * 1.10 if pd.notna(cur["rolling_body"]) else False
-    atr_ok = float(cur["atr"]) > float(cur["close"]) * 0.0030 if pd.notna(cur["atr"]) else False
-    min_atr_pct = float(getattr(state, "min_atr_pct", 0.0038))
-    min_adx = float(getattr(state, "min_adx", 20.0))
+    body_ok = body >= float(cur["rolling_body"]) * 0.90 if pd.notna(cur["rolling_body"]) else False
+    atr_ok = float(cur["atr"]) > float(cur["close"]) * 0.0025 if pd.notna(cur["atr"]) else False
+    min_atr_pct = float(getattr(state, "min_atr_pct", 0.0032))
+    min_adx = float(getattr(state, "min_adx", 18.0))
     vol_ok = _atr_pct(cur) >= min_atr_pct
     adx_ok = float(cur["adx"]) >= min_adx if pd.notna(cur["adx"]) else False
 
     htf_up = htf["close"] > htf["ema200"] and htf["ema20"] > htf["ema50"]
-    htf_slope_up = htf["ema20"] > htf_prev["ema20"] and htf["ema50"] >= htf_prev["ema50"]
+    htf_slope_up = htf["ema20"] > htf_prev["ema20"]
     ltf_up = cur["ema20"] > cur["ema50"]
-    trend_ok_long = (htf["ema20"] - htf["ema50"]) / htf["close"] > 0.0030
+    trend_ok_long = (htf["ema20"] - htf["ema50"]) / htf["close"] > 0.0020
 
-    pullback = cur["low"] <= cur["ema20"] * 1.005
+    pullback = cur["low"] <= cur["ema20"] * 1.01
     reclaim = cur["close"] > cur["ema20"] and prev["close"] <= prev["ema20"]
     prev_highs = df_ltf["high"].iloc[-11:-1]
     breakout = cur["close"] > prev_highs.max()
-    entry_condition = (pullback and reclaim) or breakout
-
     momentum = (cur["close"] - prev["close"]) / prev["close"] if prev["close"] != 0 else 0.0
-    momentum_ok = momentum > 0.0025
+    momentum_ok = momentum > 0.0015
 
     bullish_trigger = _engine_bullish_trigger_marked(df_ltf_eng)
-    relaxed_entry_ok = bullish_trigger or breakout or (pullback and reclaim and momentum_ok)
-    runner_mode = adx_ok and float(cur["adx"]) >= 28 and momentum > 0.004 and trend_ok_long
+    regime_bias_ok = htf_regime in {"BULL_TREND", "RANGING", "UNKNOWN"}
+    entry_ok = breakout or (pullback and reclaim) or bullish_trigger
+    runner_mode = adx_ok and float(cur["adx"]) >= 26 and momentum > 0.0035 and trend_ok_long
 
-    if htf_up and ltf_up and trend_ok_long and htf_slope_up and body_ok and atr_ok and vol_ok and adx_ok and entry_condition and relaxed_entry_ok:
+    if htf_up and ltf_up and trend_ok_long and htf_slope_up and body_ok and atr_ok and vol_ok and adx_ok and regime_bias_ok and entry_ok and momentum_ok:
         entry = float(cur["close"])
         recent = df_ltf.iloc[:-1]
         stop = min(_swing_low(recent, 20), float(cur["ema50"])) * 0.998
@@ -193,7 +192,7 @@ def generate_signal_trend_btc(df_ltf, df_htf, symbol, state=None):
                 stop_loss=stop,
                 take_profit=entry + risk * (3.5 if runner_mode else 3.0),
                 symbol=symbol,
-                strategy="btc_trend_v7",
+                strategy="btc_trend_v8",
                 regime="trend",
                 stop_loss_pct=risk / entry,
                 take_profit_pct=(risk * (2.5 if runner_mode else 3.0)) / entry,
@@ -258,7 +257,7 @@ def generate_signal_reclaim_alt(df_ltf, symbol, state=None):
             stop_loss=stop,
             take_profit=tp1,
             symbol=symbol,
-            strategy="alt_reclaim_v7",
+            strategy="alt_reclaim_v8",
             regime="mean_reversion",
             stop_loss_pct=risk / entry,
             take_profit_pct=(tp1 - entry) / entry,
