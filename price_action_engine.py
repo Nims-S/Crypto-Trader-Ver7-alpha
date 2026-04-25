@@ -1,7 +1,5 @@
 import pandas as pd
 import numpy as np
-from scipy.signal import argrelextrema
-from sklearn.cluster import KMeans
 
 
 class PriceActionEngine:
@@ -10,8 +8,8 @@ class PriceActionEngine:
         window: How many candles to the left/right to check for a swing high/low.
         volume_multiplier: How much higher the volume must be compared to the average to be a valid trigger.
         """
-        self.window = window
-        self.volume_multiplier = volume_multiplier
+        self.window = int(window)
+        self.volume_multiplier = float(volume_multiplier)
 
     def _prepare(self, df: pd.DataFrame) -> pd.DataFrame:
         """Make sure the dataframe has the columns this engine expects."""
@@ -20,7 +18,6 @@ class PriceActionEngine:
 
         out = df.copy()
 
-        # Normalize timestamp/index if needed, but keep it lightweight.
         if "timestamp" in out.columns and not isinstance(out.index, pd.DatetimeIndex):
             out["timestamp"] = pd.to_datetime(out["timestamp"], utc=True, errors="coerce")
             out = out.set_index("timestamp", drop=False)
@@ -32,23 +29,39 @@ class PriceActionEngine:
 
         return out
 
+    def _mark_swings(self, values: np.ndarray, mode: str) -> np.ndarray:
+        """Pure numpy swing detection to avoid extra dependency load."""
+        n = len(values)
+        flags = np.zeros(n, dtype=bool)
+        w = self.window
+        if n < (w * 2) + 1:
+            return flags
+
+        for i in range(w, n - w):
+            cur = values[i]
+            left = values[i - w:i]
+            right = values[i + 1:i + w + 1]
+            if mode == "high":
+                if cur > left.max() and cur > right.max():
+                    flags[i] = True
+            else:
+                if cur < left.min() and cur < right.min():
+                    flags[i] = True
+        return flags
+
     def get_swing_highs_lows(self, df: pd.DataFrame) -> pd.DataFrame:
         """Finds mathematical peaks and valleys in the price chart."""
         df = self._prepare(df)
         if df.empty:
             return df
 
-        highs = df["high"].values
-        swing_high_indices = argrelextrema(highs, np.greater, order=self.window)[0]
-        df["is_swing_high"] = False
-        df.iloc[swing_high_indices, df.columns.get_loc("is_swing_high")] = True
-
-        lows = df["low"].values
-        swing_low_indices = argrelextrema(lows, np.less, order=self.window)[0]
-        df["is_swing_low"] = False
-        df.iloc[swing_low_indices, df.columns.get_loc("is_swing_low")] = True
-
+        df["is_swing_high"] = self._mark_swings(df["high"].to_numpy(dtype=float), "high")
+        df["is_swing_low"] = self._mark_swings(df["low"].to_numpy(dtype=float), "low")
         return df
+
+    def prepare(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Convenience method for callers that need swings already marked."""
+        return self.get_swing_highs_lows(df)
 
     def determine_regime(self, df: pd.DataFrame) -> str:
         """Determines if the market structure is Bullish, Bearish, or Ranging."""
@@ -56,10 +69,7 @@ class PriceActionEngine:
         if df.empty or len(df) < max(self.window * 4, 10):
             return "UNKNOWN"
 
-        # Populate swings on demand so callers can pass raw OHLCV.
-        if "is_swing_high" not in df.columns or "is_swing_low" not in df.columns:
-            df = self.get_swing_highs_lows(df)
-        elif not df["is_swing_high"].any() and not df["is_swing_low"].any():
+        if not df["is_swing_high"].any() and not df["is_swing_low"].any():
             df = self.get_swing_highs_lows(df)
 
         swings = df[(df["is_swing_high"] == True) | (df["is_swing_low"] == True)].dropna()
@@ -75,21 +85,25 @@ class PriceActionEngine:
 
         if recent_highs[1] > recent_highs[0] and recent_lows[1] > recent_lows[0]:
             return "BULL_TREND"
-        elif recent_highs[1] < recent_highs[0] and recent_lows[1] < recent_lows[0]:
+        if recent_highs[1] < recent_highs[0] and recent_lows[1] < recent_lows[0]:
             return "BEAR_TREND"
-        else:
-            return "RANGING"
+        return "RANGING"
 
     def find_support_resistance(self, df: pd.DataFrame, num_levels=4) -> list:
-        """Uses K-Means clustering to find where prices bunch up (S&R zones)."""
+        """Finds approximate support/resistance levels using price quantiles."""
         df = self._prepare(df)
-        if df.empty:
+        if df.empty or "close" not in df.columns:
             return []
 
-        closes = df["close"].values.reshape(-1, 1)
-        kmeans = KMeans(n_clusters=num_levels, random_state=0, n_init=10)
-        kmeans.fit(closes)
-        levels = sorted([cluster[0] for cluster in kmeans.cluster_centers_])
+        closes = pd.to_numeric(df["close"], errors="coerce").dropna()
+        if closes.empty:
+            return []
+
+        if len(closes) <= num_levels:
+            return sorted(map(float, closes.unique()))
+
+        qs = np.linspace(0.15, 0.85, num_levels)
+        levels = sorted({float(closes.quantile(q)) for q in qs})
         return levels
 
     def check_bullish_trigger(self, df: pd.DataFrame) -> bool:
