@@ -32,10 +32,16 @@ class Signal:
     stop_loss_pct: float = 0.0
     take_profit_pct: float = 0.0
     secondary_take_profit_pct: float = 0.0
+    tp3_pct: float = 0.0
+    tp3_close_fraction: float = 0.0
+    trail_pct: float = 0.0
+    trail_atr_mult: float = 0.0
     tp1_close_fraction: float = 0.5
     tp2_close_fraction: float = 0.5
     be_trigger_rr: float = 0.0
     max_bars_override: int = 0
+    cooldown_bars: int = 0
+    size_multiplier: float = 1.0
 
 
 def ema(series, span):
@@ -104,10 +110,6 @@ def _prepare(df: pd.DataFrame) -> pd.DataFrame:
 
 def _swing_low(df, n=20):
     return float(df["low"].iloc[-n:].min())
-
-
-def _swing_high(df, n=20):
-    return float(df["high"].iloc[-n:].max())
 
 
 def _atr_pct(cur: pd.Series) -> float:
@@ -195,10 +197,16 @@ def generate_signal_trend_btc(df_ltf, df_htf, symbol, state=None):
                 stop_loss_pct=risk / entry,
                 take_profit_pct=(risk * (2.5 if runner_mode else 3.0)) / entry,
                 secondary_take_profit_pct=(risk * (10.0 if runner_mode else 8.0)) / entry,
+                tp3_pct=(risk * (12.0 if runner_mode else 9.0)) / entry,
+                tp3_close_fraction=0.0,
+                trail_pct=0.0,
+                trail_atr_mult=0.0,
                 tp1_close_fraction=0.05 if runner_mode else 0.10,
                 tp2_close_fraction=0.95 if runner_mode else 0.90,
                 be_trigger_rr=2.4 if runner_mode else 1.8,
                 max_bars_override=120 if runner_mode else 72,
+                cooldown_bars=0,
+                size_multiplier=1.0,
             )
 
     return None
@@ -225,7 +233,6 @@ def generate_signal_reclaim_alt(df_ltf, symbol, state=None):
     prev = df_ltf.iloc[-2]
 
     lookback = 20
-    range_high = df_ltf["high"].iloc[-lookback:].max()
     range_low = df_ltf["low"].iloc[-lookback:].min()
 
     # Sweep and reclaim long setup.
@@ -255,10 +262,16 @@ def generate_signal_reclaim_alt(df_ltf, symbol, state=None):
             stop_loss_pct=risk / entry,
             take_profit_pct=(tp1 - entry) / entry,
             secondary_take_profit_pct=(tp2 - entry) / entry,
+            tp3_pct=0.0,
+            tp3_close_fraction=0.0,
+            trail_pct=0.0,
+            trail_atr_mult=0.0,
             tp1_close_fraction=0.6,
             tp2_close_fraction=0.4,
             be_trigger_rr=0.6,
             max_bars_override=12,
+            cooldown_bars=0,
+            size_multiplier=1.0,
         )
 
     return None
