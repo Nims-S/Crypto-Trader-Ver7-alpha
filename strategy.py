@@ -14,7 +14,7 @@ class StrategyState:
     trades_this_week: int = 0
     allow_shorts: bool = False
     min_atr_pct: float = 0.0038
-    min_adx: float = 22.0
+    min_adx: float = 20.0
 
 
 @dataclass
@@ -149,9 +149,6 @@ def generate_signal_trend_btc(df_ltf, df_htf, symbol, state=None):
     if _engine_regime_marked(df_htf_eng) != "BULL_TREND":
         return None
 
-    if not _engine_bullish_trigger_marked(df_ltf_eng):
-        return None
-
     cur = df_ltf.iloc[-1]
     prev = df_ltf.iloc[-2]
     htf = df_htf.iloc[-2]
@@ -161,7 +158,7 @@ def generate_signal_trend_btc(df_ltf, df_htf, symbol, state=None):
     body_ok = body >= float(cur["rolling_body"]) * 1.10 if pd.notna(cur["rolling_body"]) else False
     atr_ok = float(cur["atr"]) > float(cur["close"]) * 0.0030 if pd.notna(cur["atr"]) else False
     min_atr_pct = float(getattr(state, "min_atr_pct", 0.0038))
-    min_adx = float(getattr(state, "min_adx", 22.0))
+    min_adx = float(getattr(state, "min_adx", 20.0))
     vol_ok = _atr_pct(cur) >= min_atr_pct
     adx_ok = float(cur["adx"]) >= min_adx if pd.notna(cur["adx"]) else False
 
@@ -179,9 +176,11 @@ def generate_signal_trend_btc(df_ltf, df_htf, symbol, state=None):
     momentum = (cur["close"] - prev["close"]) / prev["close"] if prev["close"] != 0 else 0.0
     momentum_ok = momentum > 0.0025
 
+    bullish_trigger = _engine_bullish_trigger_marked(df_ltf_eng)
+    relaxed_entry_ok = bullish_trigger or breakout or (pullback and reclaim and momentum_ok)
     runner_mode = adx_ok and float(cur["adx"]) >= 28 and momentum > 0.004 and trend_ok_long
 
-    if htf_up and ltf_up and trend_ok_long and htf_slope_up and body_ok and atr_ok and vol_ok and adx_ok and entry_condition and momentum_ok:
+    if htf_up and ltf_up and trend_ok_long and htf_slope_up and body_ok and atr_ok and vol_ok and adx_ok and entry_condition and relaxed_entry_ok:
         entry = float(cur["close"])
         recent = df_ltf.iloc[:-1]
         stop = min(_swing_low(recent, 20), float(cur["ema50"])) * 0.998
