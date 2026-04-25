@@ -136,13 +136,25 @@ def manage_position(cur, position: dict, price: float, current_atr=None):
     # Mode-aware time stop
     opened_at = position.get("opened_at")
     if opened_at:
-        hours_open = (datetime.utcnow() - opened_at).total_seconds() / 3600
-        if strategy.startswith("alt") and hours_open >= 6:
-            close_position(cur, position, price, reason="time_stop_fast")
-            return
-        if strategy.startswith("btc") and hours_open >= 48:
-            close_position(cur, position, price, reason="time_stop_trend")
-            return
+        if isinstance(opened_at, str):
+            try:
+                opened_at = datetime.fromisoformat(opened_at.replace("Z", "+00:00"))
+            except Exception:
+                opened_at = None
+        if opened_at is not None and hasattr(opened_at, "tzinfo") and opened_at.tzinfo is not None:
+            age_hours = (datetime.now(opened_at.tzinfo) - opened_at).total_seconds() / 3600
+        elif opened_at is not None:
+            age_hours = (datetime.utcnow() - opened_at).total_seconds() / 3600
+        else:
+            age_hours = None
+
+        if age_hours is not None:
+            if strategy.startswith("alt") and age_hours >= 6:
+                close_position(cur, position, price, reason="time_stop_fast")
+                return
+            if strategy.startswith("btc") and age_hours >= 48:
+                close_position(cur, position, price, reason="time_stop_trend")
+                return
 
     # SL
     if (is_long and price <= sl) or (not is_long and price >= sl):
@@ -155,7 +167,7 @@ def manage_position(cur, position: dict, price: float, current_atr=None):
         close_size = size * tp1_fraction
         _record_close(cur, symbol, entry, price, close_size, is_long, regime, "tp1", confidence, strategy)
         cur.execute(
-            "UPDATE positions SET size=%s, sl=%s, tp1_hit=TRUE WHERE symbol=%s",
+            "UPDATE positions SET size=%s, sl=%s, tp1_hit=TRUE, updated_at=NOW() WHERE symbol=%s",
             (size - close_size, entry, symbol),
         )
         return
