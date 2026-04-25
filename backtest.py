@@ -134,12 +134,14 @@ def _cache_path(sym: str, tf: str, since: int | None, until: int | None) -> Path
 def fetch_ohlcv_full(sym, tf, since=None, until=None, use_cache=True) -> pd.DataFrame:
     cache_file = _cache_path(sym, tf, since, until)
     if use_cache and cache_file.exists():
-        df = pd.read_csv(cache_file)
-        if not df.empty:
-            df["timestamp"] = pd.to_datetime(df["timestamp"], utc=True)
-            df = df.set_index("timestamp").sort_index()
-            return compute_indicators(df.reset_index()).set_index("timestamp").sort_index()
-        return pd.DataFrame()
+        cached = pd.read_csv(cache_file)
+        if cached.empty:
+            return pd.DataFrame()
+        if "timestamp" not in cached.columns:
+            return pd.DataFrame()
+        cached["timestamp"] = pd.to_datetime(cached["timestamp"], utc=True, errors="coerce")
+        cached = cached.dropna(subset=["timestamp"]).set_index("timestamp").sort_index()
+        return cached
 
     rows = []
     cur = since
