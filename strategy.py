@@ -145,8 +145,10 @@ def compute_indicators(df: pd.DataFrame) -> pd.DataFrame:
     df["bb_lower"] = bb_lower
     df["bb_width"] = (bb_upper - bb_lower) / bb_mid.replace(0.0, np.nan)
 
-    df["atr_pct_rank"] = _percent_rank(df["atr_pct"].fillna(method="ffill"), 252)
-    df["bb_width_rank"] = _percent_rank(df["bb_width"].fillna(method="ffill"), 252)
+    atr_pct_filled = df["atr_pct"].ffill()
+    bb_width_filled = df["bb_width"].ffill()
+    df["atr_pct_rank"] = _percent_rank(atr_pct_filled, 252)
+    df["bb_width_rank"] = _percent_rank(bb_width_filled, 252)
     df["swing_high_20"] = df["high"].rolling(20, min_periods=20).max()
     df["swing_low_20"] = df["low"].rolling(20, min_periods=20).min()
     df["range_pos"] = (df["close"] - df["low"]) / (df["high"] - df["low"]).replace(0.0, np.nan)
