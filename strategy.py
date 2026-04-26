@@ -103,14 +103,11 @@ def compute_indicators(df: pd.DataFrame) -> pd.DataFrame:
     close = df["close"]
     prev_close = close.shift(1)
 
-    tr = pd.concat(
-        [
-            high - low,
-            (high - prev_close).abs(),
-            (low - prev_close).abs(),
-        ],
-        axis=1,
-    ).max(axis=1)
+    tr = pd.concat([
+        high - low,
+        (high - prev_close).abs(),
+        (low - prev_close).abs(),
+    ], axis=1).max(axis=1)
 
     df["atr"] = tr.rolling(14, min_periods=14).mean()
     df["atr_pct"] = df["atr"] / close.replace(0.0, np.nan)
@@ -442,6 +439,87 @@ def _alt_mean_reversion_long(df_ltf: pd.DataFrame, df_htf: pd.DataFrame, symbol:
     )
 
 
+def _alt_trend_pullback_long(df_ltf: pd.DataFrame, df_htf: pd.DataFrame, symbol: str, state: StrategyState):
+    if len(df_ltf) < 180 or len(df_htf) < 26:
+        return None
+
+    df_ltf = _prepare(df_ltf)
+    df_htf = _prepare(df_htf)
+    if df_ltf is None or df_htf is None:
+        return None
+
+    cur, prev = _daily_context(df_ltf)
+    htf_cur = df_htf.iloc[-1]
+    htf_prev = df_htf.iloc[-2]
+
+    trend_ok = (
+        _safe_float(cur["close"], 0.0) >= _safe_float(cur["ema200"], 0.0) * 0.975
+        and _safe_float(cur["ema50"], 0.0) >= _safe_float(cur["ema200"], 0.0) * 0.985
+        and _safe_float(htf_cur["close"], 0.0) >= _safe_float(htf_cur["ema200"], 0.0) * 0.90
+        and _safe_float(htf_cur["ema20"], 0.0) >= _safe_float(htf_prev["ema20"], 0.0) * 0.995
+    )
+
+    pullback = (
+        _safe_float(cur["low"], 0.0) <= _safe_float(cur["ema20"], 0.0) * 1.02
+        or _safe_float(cur["close"], 0.0) <= _safe_float(cur["bb_mid"], 0.0) * 1.02
+        or _safe_float(cur["close"], 0.0) <= _safe_float(cur["ema50"], 0.0) * 1.01
+    )
+    reclaim = (
+        _safe_float(cur["close"], 0.0) >= _safe_float(cur["open"], 0.0)
+        and _safe_float(cur["close"], 0.0) >= _safe_float(prev["close"], 0.0) * 0.99
+        and _safe_float(cur["close"], 0.0) >= _safe_float(cur["ema20"], 0.0) * 0.99
+    )
+    momentum_ok = (
+        46.0 <= _safe_float(cur["rsi"], 50.0) <= 68.0
+        and _safe_float(cur["macd_hist"], 0.0) >= -0.15 * max(_safe_float(cur["rolling_body"], 0.0), 1e-9)
+        and _safe_float(cur.get("range_pos", 0.5), 0.5) >= 0.45
+    )
+    vol_ok = (
+        _safe_float(cur["atr_pct_rank"], 0.0) >= max(0.08, state.min_atr_rank * 0.75)
+        and _safe_float(cur["bb_width_rank"], 0.0) >= max(0.08, state.min_bb_rank * 0.75)
+    )
+
+    if not (trend_ok and pullback and reclaim and momentum_ok and vol_ok):
+        return None
+
+    entry = _safe_float(cur["close"])
+    atr = _safe_float(cur["atr"])
+    swing_low = _swing_low(df_ltf.iloc[:-1], 20)
+    stop_struct = min(swing_low * 0.995, entry - (1.20 * atr))
+    risk = entry - stop_struct
+    if risk <= 0:
+        return None
+
+    tp1 = entry + (1.25 * risk)
+    tp2 = entry + (2.85 * risk)
+    tp3 = entry + (4.75 * risk)
+    strong_trend = _safe_float(cur["adx"], 0.0) >= 20.0 and _safe_float(cur["rsi"], 0.0) >= 55.0
+
+    return Signal(
+        side="LONG",
+        entry_price=entry,
+        stop_loss=stop_struct,
+        take_profit=tp1,
+        symbol=symbol,
+        strategy="alt_trend_pullback_v1",
+        regime="trend",
+        confidence=0.68 if strong_trend else 0.58,
+        stop_loss_pct=risk / entry,
+        take_profit_pct=(tp1 - entry) / entry,
+        secondary_take_profit_pct=(tp2 - entry) / entry,
+        tp3_pct=(tp3 - entry) / entry,
+        tp3_close_fraction=0.20,
+        trail_pct=0.0,
+        trail_atr_mult=1.5,
+        tp1_close_fraction=0.20,
+        tp2_close_fraction=0.50,
+        be_trigger_rr=2.0,
+        max_bars_override=24,
+        cooldown_bars=0,
+        size_multiplier=0.95 if strong_trend else 0.85,
+    )
+
+
 def generate_signal(df, state=None, symbol=None, df_htf=None):
     if df is None or df.empty:
         return None
@@ -460,4 +538,9 @@ def generate_signal(df, state=None, symbol=None, df_htf=None):
     mr_sig = _alt_mean_reversion_long(df, df_htf, symbol, state)
     if mr_sig is not None:
         return mr_sig
+
+    trend_sig = _alt_trend_pullback_long(df, df_htf, symbol, state)
+    if trend_sig is not None:
+        return trend_sig
+
     return None
