@@ -240,7 +240,7 @@ def run_backtest(sym, tf, start=None, end=None, allow_shorts=False, max_bars: in
     since = _to_ms(start)
     until = _to_ms(end)
 
-    now_ms = int(pd.Timestamp.utcnow().timestamp() * 1000)
+    now_ms = int(pd.Timestamp.now(tz="UTC").timestamp() * 1000)
     if until:
         until = min(until, now_ms)
 
