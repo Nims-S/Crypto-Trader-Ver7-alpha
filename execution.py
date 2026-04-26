@@ -22,13 +22,44 @@ def _current_size(cur, symbol: str) -> float:
     return float(row[0]) if row else 0.0
 
 
-def _record_close(cur, symbol, entry, close_price, closed_size, is_long, regime, reason, confidence, strategy):
+def _record_close(
+    cur,
+    symbol,
+    entry,
+    close_price,
+    closed_size,
+    is_long,
+    regime,
+    reason,
+    confidence,
+    strategy,
+    strategy_id_used,
+    strategy_score,
+    was_override_used,
+):
     if closed_size <= 0:
         return 0.0
     pnl = ((close_price - entry) * closed_size) if is_long else ((entry - close_price) * closed_size)
     cur.execute(
-        "INSERT INTO trades (symbol, entry, exit, pnl, regime, reason, confidence, strategy) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)",
-        (symbol, entry, close_price, pnl, regime, reason, confidence, strategy),
+        """
+        INSERT INTO trades (
+            symbol, entry, exit, pnl, regime, reason, confidence,
+            strategy, strategy_id_used, strategy_score, was_override_used
+        ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+        """,
+        (
+            symbol,
+            entry,
+            close_price,
+            pnl,
+            regime,
+            reason,
+            confidence,
+            strategy,
+            strategy_id_used,
+            strategy_score,
+            was_override_used,
+        ),
     )
     log_trade_performance(cur, strategy, regime, pnl)
     if pnl <= 0:
@@ -55,6 +86,9 @@ def open_position(
     tp1_close_fraction,
     tp2_close_fraction,
     confidence,
+    strategy_id_used=None,
+    strategy_score=0.0,
+    was_override_used=False,
 ):
     is_long = direction == "LONG"
 
@@ -80,8 +114,10 @@ def open_position(
         INSERT INTO positions (
             symbol, entry, sl, tp, tp2, size, original_size,
             regime, confidence, direction, strategy,
-            stop_loss_pct, tp1_close_fraction, tp2_close_fraction, opened_at
-        ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,NOW())
+            stop_loss_pct, take_profit_pct, secondary_take_profit_pct,
+            trail_pct, trail_atr_mult, tp1_close_fraction, tp2_close_fraction,
+            strategy_id_used, strategy_score, was_override_used, opened_at
+        ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,NOW())
         """,
         (
             symbol,
@@ -96,8 +132,15 @@ def open_position(
             direction,
             strategy,
             stop_loss_pct,
+            take_profit_pct,
+            secondary_take_profit_pct,
+            trail_pct,
+            trail_atr_mult,
             tp1_fraction,
             tp2_fraction,
+            strategy_id_used,
+            strategy_score,
+            was_override_used,
         ),
     )
 
@@ -111,9 +154,26 @@ def close_position(cur, position: dict, price: float, reason: str):
     regime = position.get("regime", "unknown")
     confidence = float(position.get("confidence") or 0)
     strategy = position.get("strategy", "unknown")
+    strategy_id_used = position.get("strategy_id_used")
+    strategy_score = float(position.get("strategy_score") or 0.0)
+    was_override_used = bool(position.get("was_override_used", False))
 
     size = _current_size(cur, symbol)
-    _record_close(cur, symbol, entry, price, size, is_long, regime, reason, confidence, strategy)
+    _record_close(
+        cur,
+        symbol,
+        entry,
+        price,
+        size,
+        is_long,
+        regime,
+        reason,
+        confidence,
+        strategy,
+        strategy_id_used,
+        strategy_score,
+        was_override_used,
+    )
     cur.execute("DELETE FROM positions WHERE symbol=%s", (symbol,))
     send_telegram(f"🛑 CLOSE {symbol} | Reason={reason} | Exit={price:.4f}")
     return True
@@ -130,6 +190,9 @@ def manage_position(cur, position: dict, price: float, current_atr=None, current
     regime = position.get("regime", "unknown")
     confidence = float(position.get("confidence") or 0)
     strategy = position.get("strategy", "unknown")
+    strategy_id_used = position.get("strategy_id_used")
+    strategy_score = float(position.get("strategy_score") or 0.0)
+    was_override_used = bool(position.get("was_override_used", False))
     tp1_fraction = float(position.get("tp1_close_fraction") or 0.30)
 
     opened_at = position.get("opened_at")
@@ -161,7 +224,21 @@ def manage_position(cur, position: dict, price: float, current_atr=None, current
     if not tp1_hit and ((is_long and price >= tp1) or (not is_long and price <= tp1)):
         size = _current_size(cur, symbol)
         close_size = size * tp1_fraction
-        _record_close(cur, symbol, entry, price, close_size, is_long, regime, "tp1", confidence, strategy)
+        _record_close(
+            cur,
+            symbol,
+            entry,
+            price,
+            close_size,
+            is_long,
+            regime,
+            "tp1",
+            confidence,
+            strategy,
+            strategy_id_used,
+            strategy_score,
+            was_override_used,
+        )
         cur.execute(
             "UPDATE positions SET size=%s, sl=%s, tp1_hit=TRUE, updated_at=NOW() WHERE symbol=%s",
             (size - close_size, entry, symbol),
