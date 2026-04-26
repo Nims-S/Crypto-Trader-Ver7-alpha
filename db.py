@@ -24,6 +24,9 @@ def init_db():
             confidence FLOAT DEFAULT 0,
             direction TEXT DEFAULT 'LONG',
             strategy TEXT DEFAULT 'unknown',
+            strategy_id_used TEXT,
+            strategy_score FLOAT DEFAULT 0,
+            was_override_used BOOLEAN DEFAULT FALSE,
             stop_loss_pct FLOAT DEFAULT 0,
             take_profit_pct FLOAT DEFAULT 0,
             secondary_take_profit_pct FLOAT DEFAULT 0,
@@ -52,6 +55,9 @@ def init_db():
             reason TEXT DEFAULT '',
             confidence FLOAT DEFAULT 0,
             strategy TEXT DEFAULT 'unknown',
+            strategy_id_used TEXT,
+            strategy_score FLOAT DEFAULT 0,
+            was_override_used BOOLEAN DEFAULT FALSE,
             timestamp TIMESTAMP DEFAULT NOW()
         )
     """)
@@ -151,6 +157,12 @@ def init_db():
     safe_migrations = [
         ("positions", "opened_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"),
         ("positions", "updated_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"),
+        ("positions", "strategy_id_used", "TEXT"),
+        ("positions", "strategy_score", "FLOAT DEFAULT 0"),
+        ("positions", "was_override_used", "BOOLEAN DEFAULT FALSE"),
+        ("trades", "strategy_id_used", "TEXT"),
+        ("trades", "strategy_score", "FLOAT DEFAULT 0"),
+        ("trades", "was_override_used", "BOOLEAN DEFAULT FALSE"),
         ("strategy_registry", "validated_at", "TIMESTAMP"),
         ("strategy_registry", "created_at", "TIMESTAMP NOT NULL DEFAULT NOW()"),
         ("strategy_registry", "updated_at", "TIMESTAMP NOT NULL DEFAULT NOW()"),
