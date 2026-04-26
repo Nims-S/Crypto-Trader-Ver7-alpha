@@ -365,7 +365,7 @@ def _btc_short_signal(df_ltf: pd.DataFrame, df_htf: pd.DataFrame, symbol: str, s
 
 
 def _alt_mean_reversion_long(df_ltf: pd.DataFrame, df_htf: pd.DataFrame, symbol: str, state: StrategyState):
-    if len(df_ltf) < 220 or len(df_htf) < 30:
+    if len(df_ltf) < 180 or len(df_htf) < 26:
         return None
 
     df_ltf = _prepare(df_ltf)
@@ -375,29 +375,29 @@ def _alt_mean_reversion_long(df_ltf: pd.DataFrame, df_htf: pd.DataFrame, symbol:
 
     cur, prev = _daily_context(df_ltf)
     htf_cur = df_htf.iloc[-1]
-    htf_prev = df_htf.iloc[-2]
 
     oversold = (
-        _safe_float(cur["close"], 0.0) <= _safe_float(cur["bb_lower"], 0.0) * 1.01
-        or _safe_float(cur["close"], 0.0) <= _safe_float(cur["ema20"], 0.0) * 0.975
+        _safe_float(cur["close"], 0.0) <= _safe_float(cur["bb_lower"], 0.0) * 1.03
+        or _safe_float(cur["close"], 0.0) <= _safe_float(cur["ema20"], 0.0) * 0.985
+        or _safe_float(cur["rsi"], 50.0) <= 44.0
     )
     reclaim = (
         _safe_float(cur["close"], 0.0) > _safe_float(cur["open"], 0.0)
-        and _safe_float(cur["close"], 0.0) > _safe_float(prev["close"], 0.0) * 0.995
-        and _safe_float(cur["close"], 0.0) > _safe_float(cur["ema20"], 0.0)
+        and _safe_float(cur["close"], 0.0) > _safe_float(prev["close"], 0.0) * 0.992
+        and _safe_float(cur["close"], 0.0) >= _safe_float(cur["ema20"], 0.0) * 0.995
     )
     htf_filter = (
-        _safe_float(htf_cur["close"], 0.0) >= _safe_float(htf_cur["ema200"], 0.0) * 0.94
-        or _safe_float(htf_cur["ema20"], 0.0) >= _safe_float(htf_cur["ema50"], 0.0) * 0.98
+        _safe_float(htf_cur["close"], 0.0) >= _safe_float(htf_cur["ema200"], 0.0) * 0.90
+        or _safe_float(htf_cur["ema20"], 0.0) >= _safe_float(htf_cur["ema50"], 0.0) * 0.96
     )
     momentum_turn = (
-        _safe_float(cur["rsi"], 50.0) <= 40.0
-        and _safe_float(cur["macd_hist"], 0.0) >= _safe_float(prev["macd_hist"], 0.0)
-        and _safe_float(cur.get("range_pos", 0.5), 0.5) <= 0.35
+        _safe_float(cur["rsi"], 50.0) <= 46.0
+        and _safe_float(cur["macd_hist"], 0.0) >= _safe_float(prev["macd_hist"], 0.0) * 0.90
+        and _safe_float(cur.get("range_pos", 0.5), 0.5) <= 0.45
     )
     vol_ok = (
-        _safe_float(cur["atr_pct_rank"], 0.0) >= max(0.10, state.min_atr_rank * 0.8)
-        and _safe_float(cur["bb_width_rank"], 0.0) >= max(0.10, state.min_bb_rank * 0.8)
+        _safe_float(cur["atr_pct_rank"], 0.0) >= max(0.08, state.min_atr_rank * 0.75)
+        and _safe_float(cur["bb_width_rank"], 0.0) >= max(0.08, state.min_bb_rank * 0.75)
     )
 
     if not (oversold and reclaim and htf_filter and momentum_turn and vol_ok):
@@ -406,16 +406,16 @@ def _alt_mean_reversion_long(df_ltf: pd.DataFrame, df_htf: pd.DataFrame, symbol:
     entry = _safe_float(cur["close"])
     atr = _safe_float(cur["atr"])
     swing_low = _swing_low(df_ltf.iloc[:-1], 20)
-    stop_struct = min(swing_low * 0.996, entry - (1.15 * atr))
+    stop_struct = min(swing_low * 0.995, entry - (1.10 * atr))
     risk = entry - stop_struct
     if risk <= 0:
         return None
 
-    tp1 = entry + (1.15 * risk)
-    tp2 = entry + (2.75 * risk)
-    tp3 = entry + (4.75 * risk)
-    be_rr = 1.8
-    strong_reversal = _safe_float(cur["rsi"], 0.0) <= 34.0 and _safe_float(cur["macd_hist"], 0.0) > 0.0
+    tp1 = entry + (1.10 * risk)
+    tp2 = entry + (2.60 * risk)
+    tp3 = entry + (4.50 * risk)
+    be_rr = 1.6
+    strong_reversal = _safe_float(cur["rsi"], 0.0) <= 36.0 and _safe_float(cur["macd_hist"], 0.0) > 0.0
 
     return Signal(
         side="LONG",
@@ -423,22 +423,22 @@ def _alt_mean_reversion_long(df_ltf: pd.DataFrame, df_htf: pd.DataFrame, symbol:
         stop_loss=stop_struct,
         take_profit=tp1,
         symbol=symbol,
-        strategy="alt_mr_v2",
+        strategy="alt_mr_v3",
         regime="mean_reversion",
-        confidence=0.76 if strong_reversal else 0.64,
+        confidence=0.74 if strong_reversal else 0.62,
         stop_loss_pct=risk / entry,
         take_profit_pct=(tp1 - entry) / entry,
         secondary_take_profit_pct=(tp2 - entry) / entry,
         tp3_pct=(tp3 - entry) / entry,
-        tp3_close_fraction=0.30,
+        tp3_close_fraction=0.25,
         trail_pct=0.0,
-        trail_atr_mult=1.4,
-        tp1_close_fraction=0.30,
-        tp2_close_fraction=0.40,
+        trail_atr_mult=1.3,
+        tp1_close_fraction=0.25,
+        tp2_close_fraction=0.45,
         be_trigger_rr=be_rr,
-        max_bars_override=18,
+        max_bars_override=16,
         cooldown_bars=0,
-        size_multiplier=1.0 if strong_reversal else 0.85,
+        size_multiplier=1.0 if strong_reversal else 0.9,
     )
 
 
