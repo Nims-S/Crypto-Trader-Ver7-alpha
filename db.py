@@ -111,9 +111,49 @@ def init_db():
         )
     """)
 
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS strategy_registry (
+            strategy_id TEXT PRIMARY KEY,
+            base_strategy TEXT NOT NULL DEFAULT 'unknown',
+            version INTEGER NOT NULL DEFAULT 1,
+            status TEXT NOT NULL DEFAULT 'candidate',
+            parameters JSONB NOT NULL DEFAULT '{}'::jsonb,
+            metrics JSONB NOT NULL DEFAULT '{}'::jsonb,
+            tags JSONB NOT NULL DEFAULT '[]'::jsonb,
+            source TEXT NOT NULL DEFAULT 'manual',
+            notes TEXT NOT NULL DEFAULT '',
+            active BOOLEAN NOT NULL DEFAULT FALSE,
+            validated_at TIMESTAMP,
+            created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+        )
+    """)
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS strategy_experiments (
+            id BIGSERIAL PRIMARY KEY,
+            strategy_id TEXT NOT NULL,
+            symbol TEXT NOT NULL,
+            timeframe TEXT NOT NULL,
+            run_type TEXT NOT NULL DEFAULT 'backtest',
+            parameters JSONB NOT NULL DEFAULT '{}'::jsonb,
+            metrics JSONB NOT NULL DEFAULT '{}'::jsonb,
+            passed BOOLEAN NOT NULL DEFAULT FALSE,
+            notes TEXT NOT NULL DEFAULT '',
+            created_at TIMESTAMP NOT NULL DEFAULT NOW()
+        )
+    """)
+
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_strategy_experiments_strategy_id ON strategy_experiments(strategy_id, created_at DESC)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_strategy_experiments_created_at ON strategy_experiments(created_at DESC)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_strategy_registry_active ON strategy_registry(active, updated_at DESC)")
+
     safe_migrations = [
         ("positions", "opened_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"),
         ("positions", "updated_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"),
+        ("strategy_registry", "validated_at", "TIMESTAMP"),
+        ("strategy_registry", "created_at", "TIMESTAMP NOT NULL DEFAULT NOW()"),
+        ("strategy_registry", "updated_at", "TIMESTAMP NOT NULL DEFAULT NOW()"),
     ]
     for table, col, col_type in safe_migrations:
         cur.execute(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {col} {col_type}")
