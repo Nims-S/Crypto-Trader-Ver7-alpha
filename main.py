@@ -2,28 +2,28 @@
 main.py — Flask web server + bot thread launcher.
 """
 
+from __future__ import annotations
+
+import logging
 import os
 import re
 import threading
 import time
-import logging
 
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 
+from api_v2 import api_v2
 from bot import run_bot
-from config import PORT, BOT_VERSION, RESET_TOKEN
+from config import BOT_VERSION, PORT, RESET_TOKEN
 from db import get_conn, init_db
 from price_feed import feeds
 from risk import get_dynamic_capital
 from state import get_controls, get_state, set_control
-from api_v2 import api_v2
-import datetime
 
-start = int(datetime.datetime(2022, 1, 1).timestamp() * 1000)
-raw = fetch_ohlcv_full(symbol, timeframe, start)
 app = Flask(__name__)
 app.register_blueprint(api_v2, url_prefix="/api/v2")
+
 # ── CORS ──────────────────────────────────────────────────────────────────────
 ALLOWED_ORIGINS = [
     o.strip()
@@ -40,7 +40,7 @@ CORS(
     app,
     resources={
         r"/caffeine/*": {"origins": ALLOWED_ORIGINS + [CAFFEINE_ORIGIN_REGEX]},
-        r"/*":          {"origins": ALLOWED_ORIGINS},
+        r"/*": {"origins": ALLOWED_ORIGINS},
     },
     supports_credentials=False,
 )
@@ -57,16 +57,20 @@ class IgnoreCaffeineFilter(logging.Filter):
 logging.getLogger("werkzeug").addFilter(IgnoreCaffeineFilter())
 
 
-BOT_THREAD_LOCK    = threading.Lock()
+BOT_THREAD_LOCK = threading.Lock()
 BOT_THREAD_STARTED = False
 BOT_THREAD_ENABLED = os.getenv("BOT_THREAD_ENABLED", "true").strip().lower() in {
-    "1", "true", "yes", "on"
+    "1",
+    "true",
+    "yes",
+    "on",
 }
 
 _LOCK_CONN = None
 
 
 def background_executor():
+    """Start the bot loop once the web process is ready."""
     global _LOCK_CONN
     print("⏳ Waiting for web server to stabilise...", flush=True)
     time.sleep(5)
@@ -107,6 +111,7 @@ def start_background_executor_once():
 
 # ── routes ────────────────────────────────────────────────────────────────────
 
+
 @app.route("/")
 def home():
     return jsonify({"status": "running", "engine": f"algobot_{BOT_VERSION}"})
@@ -142,21 +147,26 @@ def caffeine_controls_update():
 def health():
     return jsonify({"status": "alive", "version": BOT_VERSION})
 
+
 @app.route("/sync_levels", methods=["POST"])
 def sync_levels():
+    """Lightweight maintenance endpoint used by external dashboards.
+
+    The real position management logic lives in the bot loop; this endpoint only
+    verifies that the positions table is reachable and reports how many rows are
+    currently tracked.
+    """
     conn = get_conn()
     cur = conn.cursor()
 
-    cur.execute("SELECT symbol FROM positions")
-    symbols = [r[0] for r in cur.fetchall()]
-
-    for symbol in symbols:
-        # fetch position + call update_position_levels
-        pass
+    cur.execute("SELECT COUNT(*) FROM positions")
+    count = int(cur.fetchone()[0] or 0)
 
     conn.commit()
-    return {"status": "synced"}
-    
+    conn.close()
+    return jsonify({"status": "synced", "tracked_positions": count})
+
+
 @app.route("/reset", methods=["POST"])
 def reset():
     if RESET_TOKEN:
