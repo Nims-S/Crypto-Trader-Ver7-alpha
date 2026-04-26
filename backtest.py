@@ -35,6 +35,21 @@ MAX_BARS_BY_REGIME = {
     "mean_reversion": 12,
 }
 
+REQUIRED_INDICATOR_COLS = {
+    "atr",
+    "atr_pct",
+    "atr_pct_rank",
+    "bb_width",
+    "bb_width_rank",
+    "rolling_body",
+    "ema20",
+    "ema50",
+    "ema200",
+    "adx",
+    "rsi",
+    "macd_hist",
+}
+
 
 @dataclass
 class Position:
@@ -131,17 +146,28 @@ def _cache_path(sym: str, tf: str, since: int | None, until: int | None) -> Path
     return CACHE_DIR / f"{safe_sym}_{tf}_{since_s}_{until_s}.csv"
 
 
+def _normalize_cached_frame(cached: pd.DataFrame) -> pd.DataFrame:
+    if cached.empty:
+        return cached
+    if "timestamp" not in cached.columns:
+        return pd.DataFrame()
+    cached["timestamp"] = pd.to_datetime(cached["timestamp"], utc=True, errors="coerce")
+    cached = cached.dropna(subset=["timestamp"]).set_index("timestamp").sort_index()
+    if not REQUIRED_INDICATOR_COLS.issubset(cached.columns):
+        cached = compute_indicators(cached.reset_index())
+        if "timestamp" in cached.columns:
+            cached["timestamp"] = pd.to_datetime(cached["timestamp"], utc=True, errors="coerce")
+            cached = cached.dropna(subset=["timestamp"]).set_index("timestamp").sort_index()
+    return cached
+
+
 def fetch_ohlcv_full(sym, tf, since=None, until=None, use_cache=True) -> pd.DataFrame:
     cache_file = _cache_path(sym, tf, since, until)
     if use_cache and cache_file.exists():
         cached = pd.read_csv(cache_file)
-        if cached.empty:
-            return pd.DataFrame()
-        if "timestamp" not in cached.columns:
-            return pd.DataFrame()
-        cached["timestamp"] = pd.to_datetime(cached["timestamp"], utc=True, errors="coerce")
-        cached = cached.dropna(subset=["timestamp"]).set_index("timestamp").sort_index()
-        return cached
+        cached = _normalize_cached_frame(cached)
+        if not cached.empty:
+            return cached
 
     rows = []
     cur = since
@@ -161,8 +187,8 @@ def fetch_ohlcv_full(sym, tf, since=None, until=None, use_cache=True) -> pd.Data
         return df
 
     df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms", utc=True)
-    df = compute_indicators(df.reset_index(drop=True))
-    if not isinstance(df.index, pd.DatetimeIndex):
+    df = compute_indicators(df)
+    if "timestamp" in df.columns:
         df["timestamp"] = pd.to_datetime(df["timestamp"], utc=True)
         df = df.set_index("timestamp").sort_index()
 
