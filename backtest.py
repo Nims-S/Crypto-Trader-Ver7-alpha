@@ -31,7 +31,7 @@ DEFAULT_MOVE_BE_R = 1.8
 DEFAULT_TRAIL_ATR_MULT = 1.5
 
 MAX_BARS_BY_REGIME = {
-    "trend": 72,
+    "trend": 30,
     "mean_reversion": 12,
 }
 
@@ -173,6 +173,8 @@ def fetch_ohlcv_full(sym, tf, since=None, until=None, use_cache=True) -> pd.Data
 
 def _htf_timeframe_for_symbol(symbol: str, ltf_timeframe: str) -> str:
     if symbol == "BTC/USDT":
+        if ltf_timeframe == "1d":
+            return "1w"
         return "1d" if ltf_timeframe in {"15m", "30m", "1h", "2h", "4h"} else "1h"
     return "4h" if ltf_timeframe in {"15m", "30m", "1h"} else "1d"
 
@@ -222,7 +224,7 @@ def run_backtest(sym, tf, start=None, end=None, allow_shorts=False, max_bars: in
         return {"error": f"no HTF data returned for {sym} on {htf_tf}"}
 
     if max_bars and max_bars > 0:
-        warmup = min(300, len(df) - 1)
+        warmup = min(400, len(df) - 1)
         df = df.iloc[-(max_bars + warmup):].copy()
         df_htf = df_htf[df_htf.index >= df.index.min()].copy()
         if df_htf.empty:
@@ -237,7 +239,7 @@ def run_backtest(sym, tf, start=None, end=None, allow_shorts=False, max_bars: in
     eq: list[float] = []
     cool = -1
     state = StrategyState(allow_shorts=allow_shorts)
-    start_idx = max(200, 50)
+    start_idx = max(260, 50)
 
     for i in range(start_idx, len(df) - 1):
         bar = df.iloc[i + 1]
@@ -329,7 +331,7 @@ def run_backtest(sym, tf, start=None, end=None, allow_shorts=False, max_bars: in
                 if max_bars and max_bars > 0:
                     max_hold = max_bars
                 else:
-                    max_hold = _sig(sig, "max_bars_override", 0) or MAX_BARS_BY_REGIME.get(regime, 36)
+                    max_hold = _sig(sig, "max_bars_override", 0) or MAX_BARS_BY_REGIME.get(regime, 30)
                 size_multiplier = _sig(sig, "size_multiplier", 1.0) or 1.0
                 trail_pct = _sig(sig, "trail_pct", 0.0) or 0.0
                 trail_atr_mult = _sig(sig, "trail_atr_mult", DEFAULT_TRAIL_ATR_MULT) or DEFAULT_TRAIL_ATR_MULT
@@ -419,7 +421,7 @@ def run_backtest(sym, tf, start=None, end=None, allow_shorts=False, max_bars: in
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--symbol", default="BTC/USDT")
-    ap.add_argument("--timeframe", default="1h")
+    ap.add_argument("--timeframe", default="1d")
     ap.add_argument("--start")
     ap.add_argument("--end")
     ap.add_argument("--max-bars", type=int, default=0, help="Limit the tested window to the most recent N bars for faster iteration")
