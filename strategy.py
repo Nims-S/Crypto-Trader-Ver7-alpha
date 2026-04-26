@@ -10,11 +10,11 @@ import pandas as pd
 class StrategyState:
     trades_this_week: int = 0
     allow_shorts: bool = False
-    min_adx: float = 18.0
-    min_atr_rank: float = 0.20
-    min_bb_rank: float = 0.20
-    rsi_long: float = 55.0
-    rsi_short: float = 45.0
+    min_adx: float = 16.0
+    min_atr_rank: float = 0.15
+    min_bb_rank: float = 0.15
+    rsi_long: float = 53.0
+    rsi_short: float = 47.0
 
 
 @dataclass
@@ -186,8 +186,17 @@ def _daily_context(df: pd.DataFrame):
     return cur, prev
 
 
-def _long_signal(df_ltf: pd.DataFrame, df_htf: pd.DataFrame, symbol: str, state: StrategyState):
-    if len(df_ltf) < 260 or len(df_htf) < 40:
+def _trend_bias_ok(cur, htf_cur, htf_prev, state: StrategyState) -> bool:
+    adx_ok = _safe_float(cur["adx"], 0.0) >= state.min_adx
+    vol_ok = (
+        _safe_float(cur["atr_pct_rank"], 0.0) >= state.min_atr_rank
+        and _safe_float(cur["bb_width_rank"], 0.0) >= state.min_bb_rank
+    )
+    return adx_ok and vol_ok
+
+
+def _btc_long_signal(df_ltf: pd.DataFrame, df_htf: pd.DataFrame, symbol: str, state: StrategyState):
+    if len(df_ltf) < 220 or len(df_htf) < 30:
         return None
 
     df_ltf = _prepare(df_ltf)
@@ -200,32 +209,35 @@ def _long_signal(df_ltf: pd.DataFrame, df_htf: pd.DataFrame, symbol: str, state:
     htf_prev = df_htf.iloc[-2]
 
     trend_ok = (
-        cur["close"] > cur["ema200"]
-        and cur["ema50"] > cur["ema200"]
-        and cur["ema20"] > cur["ema50"]
-        and htf_cur["close"] > htf_cur["ema200"]
-        and htf_cur["ema20"] >= htf_cur["ema50"]
-        and htf_cur["ema20"] >= htf_prev["ema20"]
+        _safe_float(cur["close"], 0.0) > _safe_float(cur["ema200"], 0.0) * 0.995
+        and _safe_float(cur["ema50"], 0.0) >= _safe_float(cur["ema200"], 0.0) * 0.995
+        and _safe_float(cur["ema20"], 0.0) >= _safe_float(cur["ema50"], 0.0) * 0.995
+        and _safe_float(htf_cur["close"], 0.0) > _safe_float(htf_cur["ema200"], 0.0) * 0.995
+        and _safe_float(htf_cur["ema20"], 0.0) >= _safe_float(htf_cur["ema50"], 0.0) * 0.995
+        and _safe_float(htf_cur["ema20"], 0.0) >= _safe_float(htf_prev["ema20"], 0.0) * 0.998
         and _safe_float(cur["adx"], 0.0) >= state.min_adx
     )
 
-    vol_ok = (
-        _safe_float(cur["atr_pct_rank"], 0.0) >= state.min_atr_rank
-        and _safe_float(cur["bb_width_rank"], 0.0) >= state.min_bb_rank
-    )
+    vol_ok = _trend_bias_ok(cur, htf_cur, htf_prev, state)
 
-    breakout = _safe_float(cur["close"], 0.0) > _swing_high(df_ltf.iloc[:-1], 20)
+    breakout = _safe_float(cur["close"], 0.0) > _swing_high(df_ltf.iloc[:-1], 10) * 1.001
     pullback = (
-        _safe_float(cur["low"], 0.0) <= _safe_float(cur["ema20"], 0.0) * 1.015
+        _safe_float(cur["low"], 0.0) <= _safe_float(cur["ema20"], 0.0) * 1.02
         and _safe_float(cur["close"], 0.0) > _safe_float(cur["ema20"], 0.0)
-        and _safe_float(prev["close"], 0.0) <= _safe_float(prev["ema20"], 0.0)
+        and _safe_float(prev["close"], 0.0) <= _safe_float(prev["ema20"], 0.0) * 1.01
     )
-    structure_ok = breakout or pullback
+    reclaim = (
+        _safe_float(cur["low"], 0.0) <= _safe_float(cur["ema20"], 0.0) * 1.005
+        and _safe_float(cur["close"], 0.0) > _safe_float(prev["close"], 0.0)
+        and _safe_float(cur["close"], 0.0) > _safe_float(cur["ema20"], 0.0)
+    )
+    structure_ok = breakout or pullback or reclaim
 
+    rolling_body = max(_safe_float(cur["rolling_body"], 0.0), 1e-9)
     momentum_ok = (
         _safe_float(cur["rsi"], 50.0) >= state.rsi_long
-        and _safe_float(cur["macd_hist"], 0.0) > 0.0
-        and _safe_float(cur.get("range_pos", 0.5), 0.5) >= 0.65
+        and _safe_float(cur["macd_hist"], 0.0) >= -0.10 * rolling_body
+        and _safe_float(cur.get("range_pos", 0.5), 0.5) >= 0.58
     )
 
     if not (trend_ok and vol_ok and structure_ok and momentum_ok):
@@ -234,16 +246,16 @@ def _long_signal(df_ltf: pd.DataFrame, df_htf: pd.DataFrame, symbol: str, state:
     entry = _safe_float(cur["close"])
     atr = _safe_float(cur["atr"])
     swing_low = _swing_low(df_ltf.iloc[:-1], 20)
-    stop_struct = min(swing_low * 0.9975, entry - (1.5 * atr))
+    stop_struct = min(swing_low * 0.997, entry - (1.35 * atr))
     risk = entry - stop_struct
     if risk <= 0:
         return None
 
-    tp1 = entry + (1.5 * risk)
-    tp2 = entry + (4.0 * risk)
-    tp3 = entry + (7.0 * risk)
-    be_rr = 3.0
-    runner = _safe_float(cur["adx"], 0.0) >= 28.0 and _safe_float(cur["rsi"], 0.0) >= 60.0
+    tp1 = entry + (1.35 * risk)
+    tp2 = entry + (3.25 * risk)
+    tp3 = entry + (6.0 * risk)
+    be_rr = 2.25
+    runner = _safe_float(cur["adx"], 0.0) >= 24.0 and _safe_float(cur["rsi"], 0.0) >= 58.0
 
     return Signal(
         side="LONG",
@@ -251,27 +263,27 @@ def _long_signal(df_ltf: pd.DataFrame, df_htf: pd.DataFrame, symbol: str, state:
         stop_loss=stop_struct,
         take_profit=tp1,
         symbol=symbol,
-        strategy="btc_daily_mf_v3",
+        strategy="btc_daily_mf_v4",
         regime="trend",
-        confidence=0.75 if runner else 0.60,
+        confidence=0.78 if runner else 0.62,
         stop_loss_pct=risk / entry,
         take_profit_pct=(tp1 - entry) / entry,
         secondary_take_profit_pct=(tp2 - entry) / entry,
         tp3_pct=(tp3 - entry) / entry,
-        tp3_close_fraction=0.70,
+        tp3_close_fraction=0.55,
         trail_pct=0.0,
-        trail_atr_mult=2.0,
-        tp1_close_fraction=0.05,
-        tp2_close_fraction=0.25,
+        trail_atr_mult=1.8,
+        tp1_close_fraction=0.12,
+        tp2_close_fraction=0.28,
         be_trigger_rr=be_rr,
-        max_bars_override=60,
+        max_bars_override=50,
         cooldown_bars=0,
-        size_multiplier=1.2 if runner else 1.0,
+        size_multiplier=1.15 if runner else 1.0,
     )
 
 
-def _short_signal(df_ltf: pd.DataFrame, df_htf: pd.DataFrame, symbol: str, state: StrategyState):
-    if not state.allow_shorts or len(df_ltf) < 260 or len(df_htf) < 40:
+def _btc_short_signal(df_ltf: pd.DataFrame, df_htf: pd.DataFrame, symbol: str, state: StrategyState):
+    if not state.allow_shorts or len(df_ltf) < 220 or len(df_htf) < 30:
         return None
 
     df_ltf = _prepare(df_ltf)
@@ -284,32 +296,30 @@ def _short_signal(df_ltf: pd.DataFrame, df_htf: pd.DataFrame, symbol: str, state
     htf_prev = df_htf.iloc[-2]
 
     trend_ok = (
-        cur["close"] < cur["ema200"]
-        and cur["ema50"] < cur["ema200"]
-        and cur["ema20"] < cur["ema50"]
-        and htf_cur["close"] < htf_cur["ema200"]
-        and htf_cur["ema20"] <= htf_cur["ema50"]
-        and htf_cur["ema20"] <= htf_prev["ema20"]
+        _safe_float(cur["close"], 0.0) < _safe_float(cur["ema200"], 0.0) * 1.005
+        and _safe_float(cur["ema50"], 0.0) <= _safe_float(cur["ema200"], 0.0) * 1.005
+        and _safe_float(cur["ema20"], 0.0) <= _safe_float(cur["ema50"], 0.0) * 1.005
+        and _safe_float(htf_cur["close"], 0.0) < _safe_float(htf_cur["ema200"], 0.0) * 1.005
+        and _safe_float(htf_cur["ema20"], 0.0) <= _safe_float(htf_cur["ema50"], 0.0) * 1.005
+        and _safe_float(htf_cur["ema20"], 0.0) <= _safe_float(htf_prev["ema20"], 0.0) * 1.002
         and _safe_float(cur["adx"], 0.0) >= state.min_adx
     )
 
-    vol_ok = (
-        _safe_float(cur["atr_pct_rank"], 0.0) >= state.min_atr_rank
-        and _safe_float(cur["bb_width_rank"], 0.0) >= state.min_bb_rank
-    )
+    vol_ok = _trend_bias_ok(cur, htf_cur, htf_prev, state)
 
-    breakdown = _safe_float(cur["close"], 0.0) < _swing_low(df_ltf.iloc[:-1], 20)
+    breakdown = _safe_float(cur["close"], 0.0) < _swing_low(df_ltf.iloc[:-1], 10) * 0.999
     rejection = (
-        _safe_float(cur["high"], 0.0) >= _safe_float(cur["ema20"], 0.0) * 0.99
+        _safe_float(cur["high"], 0.0) >= _safe_float(cur["ema20"], 0.0) * 0.995
         and _safe_float(cur["close"], 0.0) < _safe_float(cur["ema20"], 0.0)
-        and _safe_float(prev["close"], 0.0) >= _safe_float(prev["ema20"], 0.0)
+        and _safe_float(prev["close"], 0.0) >= _safe_float(prev["ema20"], 0.0) * 0.99
     )
     structure_ok = breakdown or rejection
 
+    rolling_body = max(_safe_float(cur["rolling_body"], 0.0), 1e-9)
     momentum_ok = (
         _safe_float(cur["rsi"], 50.0) <= state.rsi_short
-        and _safe_float(cur["macd_hist"], 0.0) < 0.0
-        and _safe_float(cur.get("range_pos", 0.5), 0.5) <= 0.35
+        and _safe_float(cur["macd_hist"], 0.0) <= 0.10 * rolling_body
+        and _safe_float(cur.get("range_pos", 0.5), 0.5) <= 0.42
     )
 
     if not (trend_ok and vol_ok and structure_ok and momentum_ok):
@@ -318,16 +328,16 @@ def _short_signal(df_ltf: pd.DataFrame, df_htf: pd.DataFrame, symbol: str, state
     entry = _safe_float(cur["close"])
     atr = _safe_float(cur["atr"])
     swing_high = _swing_high(df_ltf.iloc[:-1], 20)
-    stop_struct = max(swing_high * 1.0025, entry + (1.5 * atr))
+    stop_struct = max(swing_high * 1.003, entry + (1.35 * atr))
     risk = stop_struct - entry
     if risk <= 0:
         return None
 
-    tp1 = entry - (1.5 * risk)
-    tp2 = entry - (4.0 * risk)
-    tp3 = entry - (7.0 * risk)
-    be_rr = 3.0
-    runner = _safe_float(cur["adx"], 0.0) >= 28.0 and _safe_float(cur["rsi"], 0.0) <= 40.0
+    tp1 = entry - (1.35 * risk)
+    tp2 = entry - (3.25 * risk)
+    tp3 = entry - (6.0 * risk)
+    be_rr = 2.25
+    runner = _safe_float(cur["adx"], 0.0) >= 24.0 and _safe_float(cur["rsi"], 0.0) <= 42.0
 
     return Signal(
         side="SHORT",
@@ -335,22 +345,100 @@ def _short_signal(df_ltf: pd.DataFrame, df_htf: pd.DataFrame, symbol: str, state
         stop_loss=stop_struct,
         take_profit=tp1,
         symbol=symbol,
-        strategy="btc_daily_mf_v3",
+        strategy="btc_daily_mf_v4",
         regime="trend",
-        confidence=0.75 if runner else 0.60,
+        confidence=0.78 if runner else 0.62,
         stop_loss_pct=risk / entry,
         take_profit_pct=(entry - tp1) / entry,
         secondary_take_profit_pct=(entry - tp2) / entry,
         tp3_pct=(entry - tp3) / entry,
-        tp3_close_fraction=0.70,
+        tp3_close_fraction=0.55,
         trail_pct=0.0,
-        trail_atr_mult=2.0,
-        tp1_close_fraction=0.05,
-        tp2_close_fraction=0.25,
+        trail_atr_mult=1.8,
+        tp1_close_fraction=0.12,
+        tp2_close_fraction=0.28,
         be_trigger_rr=be_rr,
-        max_bars_override=60,
+        max_bars_override=50,
         cooldown_bars=0,
-        size_multiplier=1.2 if runner else 1.0,
+        size_multiplier=1.15 if runner else 1.0,
+    )
+
+
+def _alt_mean_reversion_long(df_ltf: pd.DataFrame, df_htf: pd.DataFrame, symbol: str, state: StrategyState):
+    if len(df_ltf) < 220 or len(df_htf) < 30:
+        return None
+
+    df_ltf = _prepare(df_ltf)
+    df_htf = _prepare(df_htf)
+    if df_ltf is None or df_htf is None:
+        return None
+
+    cur, prev = _daily_context(df_ltf)
+    htf_cur = df_htf.iloc[-1]
+    htf_prev = df_htf.iloc[-2]
+
+    oversold = (
+        _safe_float(cur["close"], 0.0) <= _safe_float(cur["bb_lower"], 0.0) * 1.01
+        or _safe_float(cur["close"], 0.0) <= _safe_float(cur["ema20"], 0.0) * 0.975
+    )
+    reclaim = (
+        _safe_float(cur["close"], 0.0) > _safe_float(cur["open"], 0.0)
+        and _safe_float(cur["close"], 0.0) > _safe_float(prev["close"], 0.0) * 0.995
+        and _safe_float(cur["close"], 0.0) > _safe_float(cur["ema20"], 0.0)
+    )
+    htf_filter = (
+        _safe_float(htf_cur["close"], 0.0) >= _safe_float(htf_cur["ema200"], 0.0) * 0.94
+        or _safe_float(htf_cur["ema20"], 0.0) >= _safe_float(htf_cur["ema50"], 0.0) * 0.98
+    )
+    momentum_turn = (
+        _safe_float(cur["rsi"], 50.0) <= 40.0
+        and _safe_float(cur["macd_hist"], 0.0) >= _safe_float(prev["macd_hist"], 0.0)
+        and _safe_float(cur.get("range_pos", 0.5), 0.5) <= 0.35
+    )
+    vol_ok = (
+        _safe_float(cur["atr_pct_rank"], 0.0) >= max(0.10, state.min_atr_rank * 0.8)
+        and _safe_float(cur["bb_width_rank"], 0.0) >= max(0.10, state.min_bb_rank * 0.8)
+    )
+
+    if not (oversold and reclaim and htf_filter and momentum_turn and vol_ok):
+        return None
+
+    entry = _safe_float(cur["close"])
+    atr = _safe_float(cur["atr"])
+    swing_low = _swing_low(df_ltf.iloc[:-1], 20)
+    stop_struct = min(swing_low * 0.996, entry - (1.15 * atr))
+    risk = entry - stop_struct
+    if risk <= 0:
+        return None
+
+    tp1 = entry + (1.15 * risk)
+    tp2 = entry + (2.75 * risk)
+    tp3 = entry + (4.75 * risk)
+    be_rr = 1.8
+    strong_reversal = _safe_float(cur["rsi"], 0.0) <= 34.0 and _safe_float(cur["macd_hist"], 0.0) > 0.0
+
+    return Signal(
+        side="LONG",
+        entry_price=entry,
+        stop_loss=stop_struct,
+        take_profit=tp1,
+        symbol=symbol,
+        strategy="alt_mr_v2",
+        regime="mean_reversion",
+        confidence=0.76 if strong_reversal else 0.64,
+        stop_loss_pct=risk / entry,
+        take_profit_pct=(tp1 - entry) / entry,
+        secondary_take_profit_pct=(tp2 - entry) / entry,
+        tp3_pct=(tp3 - entry) / entry,
+        tp3_close_fraction=0.30,
+        trail_pct=0.0,
+        trail_atr_mult=1.4,
+        tp1_close_fraction=0.30,
+        tp2_close_fraction=0.40,
+        be_trigger_rr=be_rr,
+        max_bars_override=18,
+        cooldown_bars=0,
+        size_multiplier=1.0 if strong_reversal else 0.85,
     )
 
 
@@ -364,9 +452,13 @@ def generate_signal(df, state=None, symbol=None, df_htf=None):
         return None
 
     if symbol == "BTC/USDT":
-        long_sig = _long_signal(df, df_htf, symbol, state)
+        long_sig = _btc_long_signal(df, df_htf, symbol, state)
         if long_sig is not None:
             return long_sig
-        return _short_signal(df, df_htf, symbol, state)
+        return _btc_short_signal(df, df_htf, symbol, state)
 
-    return _long_signal(df, df_htf, symbol, state)
+    mr_sig = _alt_mean_reversion_long(df, df_htf, symbol, state)
+    if mr_sig is not None:
+        return mr_sig
+
+    return _btc_long_signal(df, df_htf, symbol, state)
