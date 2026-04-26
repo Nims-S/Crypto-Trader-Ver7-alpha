@@ -521,7 +521,7 @@ def _alt_trend_pullback_long(df_ltf: pd.DataFrame, df_htf: pd.DataFrame, symbol:
     )
 
 
-def generate_signal(df, state=None, symbol=None, df_htf=None):
+def generate_signal(df, state=None, symbol=None, df_htf=None, strategy_override=None):
     if df is None or df.empty:
         return None
 
@@ -529,6 +529,18 @@ def generate_signal(df, state=None, symbol=None, df_htf=None):
     symbol = symbol or "BTC/USDT"
     if df_htf is None or df_htf.empty:
         return None
+
+    if strategy_override:
+        params = strategy_override.get("parameters") or {}
+        state = StrategyState(
+            trades_this_week=state.trades_this_week,
+            allow_shorts=bool(params.get("allow_shorts", state.allow_shorts)),
+            min_adx=float(params.get("min_adx", state.min_adx)),
+            min_atr_rank=float(params.get("min_atr_rank", state.min_atr_rank)),
+            min_bb_rank=float(params.get("min_bb_rank", state.min_bb_rank)),
+            rsi_long=float(params.get("rsi_long", state.rsi_long)),
+            rsi_short=float(params.get("rsi_short", state.rsi_short)),
+        )
 
     if symbol == "BTC/USDT":
         long_sig = _vetf_long(df, df_htf, symbol, state)
