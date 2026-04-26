@@ -60,7 +60,6 @@ def open_position(
 
     sl = _sl_from_pct(price, stop_loss_pct, is_long)
 
-    # Use signal-provided TP structure (fallback to 1R/2.5R if missing)
     if take_profit_pct and take_profit_pct > 0:
         tp1 = _tp_from_pct(price, take_profit_pct, is_long)
     else:
@@ -120,7 +119,7 @@ def close_position(cur, position: dict, price: float, reason: str):
     return True
 
 
-def manage_position(cur, position: dict, price: float, current_atr=None):
+def manage_position(cur, position: dict, price: float, current_atr=None, current_ema20=None):
     symbol = position["symbol"]
     is_long = position["direction"] == "LONG"
     entry = float(position["entry"])
@@ -133,7 +132,6 @@ def manage_position(cur, position: dict, price: float, current_atr=None):
     strategy = position.get("strategy", "unknown")
     tp1_fraction = float(position.get("tp1_close_fraction") or 0.30)
 
-    # Mode-aware time stop
     opened_at = position.get("opened_at")
     if opened_at:
         if isinstance(opened_at, str):
@@ -156,12 +154,10 @@ def manage_position(cur, position: dict, price: float, current_atr=None):
                 close_position(cur, position, price, reason="time_stop_trend")
                 return
 
-    # SL
     if (is_long and price <= sl) or (not is_long and price >= sl):
         close_position(cur, position, price, reason="stop_loss")
         return
 
-    # TP1 (partial + BE)
     if not tp1_hit and ((is_long and price >= tp1) or (not is_long and price <= tp1)):
         size = _current_size(cur, symbol)
         close_size = size * tp1_fraction
@@ -172,6 +168,23 @@ def manage_position(cur, position: dict, price: float, current_atr=None):
         )
         return
 
-    # TP2 (final)
-    if (is_long and price >= tp2) or (not is_long and price <= tp2):
-        close_position(cur, position, price, reason="tp2")
+    # EMA20 trailing for VETF
+    if strategy.startswith("vetf") and current_ema20 is not None and tp1_hit:
+        ema20 = float(current_ema20)
+        if is_long:
+            if ema20 > sl:
+                cur.execute("UPDATE positions SET sl=%s WHERE symbol=%s", (ema20, symbol))
+            if price < ema20:
+                close_position(cur, position, price, reason="ema20_trail")
+                return
+        else:
+            if ema20 < sl:
+                cur.execute("UPDATE positions SET sl=%s WHERE symbol=%s", (ema20, symbol))
+            if price > ema20:
+                close_position(cur, position, price, reason="ema20_trail")
+                return
+
+    # TP2 only for non-VETF
+    if not strategy.startswith("vetf"):
+        if (is_long and price >= tp2) or (not is_long and price <= tp2):
+            close_position(cur, position, price, reason="tp2")
