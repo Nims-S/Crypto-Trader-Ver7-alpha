@@ -1,21 +1,27 @@
 """Main live bot loop.
 
-- Evaluates only on freshly closed candles.
-- Manages open positions every loop.
-- Supports BTC VETF trend entries and optional shorts via ALLOW_SHORTS.
+Routing rules:
+- BTC/USDT -> VETF on 4h with 1d bias
+- SOL/USDT -> alt path on 4h
+- ETH/USDT -> disabled until explicitly re-enabled
+- Other alts -> alt path on 4h by default
+
+The bot evaluates only on freshly closed candles, manages positions every loop,
+and keeps live execution aligned with the backtest timeframe routing.
 """
 
 from __future__ import annotations
 
 import os
 import time
+from copy import deepcopy
 from datetime import datetime
 
 import ccxt
 import pandas as pd
 
 from caffeine import push_to_caffeine
-from config import CAPITAL, CANDLE_LIMIT, DEFAULT_TIMEFRAME, MAX_COOLDOWN_SECONDS, MAX_POSITIONS, SYMBOLS
+from config import CAPITAL, CANDLE_LIMIT, MAX_COOLDOWN_SECONDS, MAX_POSITIONS, SYMBOLS
 from db import get_conn
 from execution import manage_position, open_position
 from price_feed import feeds
@@ -31,21 +37,50 @@ except Exception as e:
 
 ALLOW_SHORTS = os.getenv("ALLOW_SHORTS", "false").strip().lower() in {"1", "true", "yes", "on"}
 
+DEFAULT_ROUTE = {
+    "enabled": True,
+    "ltf_timeframe": "4h",
+    "htf_timeframe": "1d",
+    "allow_shorts": False,
+    "strategy_mode": "alt",
+}
+
+SYMBOL_ROUTES = {
+    "BTC/USDT": {
+        "enabled": True,
+        "ltf_timeframe": "4h",
+        "htf_timeframe": "1d",
+        "allow_shorts": ALLOW_SHORTS,
+        "strategy_mode": "vetf",
+    },
+    "SOL/USDT": {
+        "enabled": True,
+        "ltf_timeframe": "4h",
+        "htf_timeframe": "1d",
+        "allow_shorts": False,
+        "strategy_mode": "alt",
+    },
+    "ETH/USDT": {
+        "enabled": False,
+        "ltf_timeframe": "4h",
+        "htf_timeframe": "1d",
+        "allow_shorts": False,
+        "strategy_mode": "disabled",
+        "pause_reason": "awaiting_edge",
+    },
+}
+
 _candle_cache: dict[str, tuple[float, pd.DataFrame]] = {}
 CANDLE_CACHE_TTL = 60
 
 
-def _htf_timeframe_for_symbol(symbol: str, ltf_timeframe: str = DEFAULT_TIMEFRAME) -> str:
-    if symbol == "BTC/USDT":
-        if ltf_timeframe in {"1m", "3m", "5m", "15m", "30m", "1h", "2h", "4h"}:
-            return "1d"
-        return "1w"
-    if ltf_timeframe in {"1m", "3m", "5m", "15m", "30m", "1h"}:
-        return "4h"
-    return "1d"
+def _route_for_symbol(symbol: str) -> dict:
+    route = deepcopy(DEFAULT_ROUTE)
+    route.update(SYMBOL_ROUTES.get(symbol, {}))
+    return route
 
 
-def fetch_historical_data(symbol: str, timeframe: str = DEFAULT_TIMEFRAME) -> pd.DataFrame:
+def fetch_historical_data(symbol: str, timeframe: str) -> pd.DataFrame:
     key = f"{symbol}_{timeframe}"
     cached_ts, cached_df = _candle_cache.get(key, (0.0, pd.DataFrame()))
     if not cached_df.empty and (time.time() - cached_ts) < CANDLE_CACHE_TTL:
@@ -61,7 +96,7 @@ def fetch_historical_data(symbol: str, timeframe: str = DEFAULT_TIMEFRAME) -> pd
         _candle_cache[key] = (time.time(), df)
         return df
     except Exception as e:
-        print(f"[FETCH ERROR] {symbol}: {e}", flush=True)
+        print(f"[FETCH ERROR] {symbol} {timeframe}: {e}", flush=True)
         return cached_df
 
 
@@ -143,11 +178,19 @@ def _to_float(value):
         return None
 
 
+def _log_route(symbol: str, route: dict):
+    print(
+        f"[ROUTE] {symbol} | enabled={route['enabled']} | ltf={route['ltf_timeframe']} | htf={route['htf_timeframe']} | mode={route['strategy_mode']}",
+        flush=True,
+    )
+
+
 def run_bot():
-    print("[BOT] LOOP STARTED (strict closed-candle mode)", flush=True)
+    print("[BOT] LOOP STARTED (routed closed-candle mode)", flush=True)
     last_trade_time: dict[str, float] = {}
     last_signal_candle: dict[str, pd.Timestamp] = {}
-    states = {s: StrategyState(allow_shorts=ALLOW_SHORTS) for s in SYMBOLS}
+    routes = {s: _route_for_symbol(s) for s in SYMBOLS}
+    states = {s: StrategyState(allow_shorts=bool(routes[s].get("allow_shorts", False))) for s in SYMBOLS}
 
     while True:
         timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
@@ -172,6 +215,9 @@ def run_bot():
             global_enabled = global_ctrl.get("enabled", True)
 
             for symbol in SYMBOLS:
+                route = routes[symbol]
+                _log_route(symbol, route)
+
                 feed = feeds.get(symbol)
                 if feed is None:
                     continue
@@ -185,9 +231,11 @@ def run_bot():
                     continue
 
                 position = load_position(cur, symbol)
+
+                # Manage open positions regardless of whether new entries are enabled.
                 if position:
                     try:
-                        df_manage = fetch_historical_data(symbol)
+                        df_manage = fetch_historical_data(symbol, route["ltf_timeframe"])
                         current_atr = None
                         current_ema20 = None
                         if not df_manage.empty:
@@ -201,16 +249,22 @@ def run_bot():
                         print(f"[MANAGE ERROR] {symbol}: {e}", flush=True)
 
                 symbol_ctrl = controls.get(symbol, {})
-                blocked = (not global_enabled) or (not symbol_ctrl.get("enabled", True))
+                blocked = (not global_enabled) or (not symbol_ctrl.get("enabled", True)) or (not route.get("enabled", True))
                 if blocked:
-                    update_asset(symbol=symbol, regime="paused", strategy="kill_switch", signal=None, position=build_position_state(position))
+                    update_asset(
+                        symbol=symbol,
+                        regime="paused",
+                        strategy=route.get("pause_reason", "route_disabled") if not route.get("enabled", True) else "kill_switch",
+                        signal=None,
+                        position=build_position_state(position),
+                    )
                     continue
 
                 if get_symbol_cooldown(cur, symbol):
                     update_asset(symbol=symbol, regime="paused", strategy="symbol_cooldown", signal=None, position=build_position_state(position))
                     continue
 
-                df = fetch_historical_data(symbol)
+                df = fetch_historical_data(symbol, route["ltf_timeframe"])
                 if df.empty:
                     update_asset(symbol=symbol, regime="unknown", strategy="data_unavailable", signal=None, position=build_position_state(position))
                     continue
@@ -220,11 +274,16 @@ def run_bot():
                     update_asset(symbol=symbol, regime="unknown", strategy="waiting_for_close", signal=None, position=build_position_state(position))
                     continue
 
-                htf_tf = _htf_timeframe_for_symbol(symbol, DEFAULT_TIMEFRAME)
-                df_htf = fetch_historical_data(symbol, timeframe=htf_tf)
+                df_htf = fetch_historical_data(symbol, route["htf_timeframe"])
                 candle_ts = closed_df.iloc[-1]["timestamp"]
                 if last_signal_candle.get(symbol) == candle_ts:
-                    update_asset(symbol=symbol, regime=position["regime"] if position else "watching", strategy=position["strategy"] if position else "waiting_for_new_candle", signal=None, position=build_position_state(position))
+                    update_asset(
+                        symbol=symbol,
+                        regime=position["regime"] if position else "watching",
+                        strategy=position["strategy"] if position else "waiting_for_new_candle",
+                        signal=None,
+                        position=build_position_state(position),
+                    )
                     continue
 
                 signal = generate_signal(closed_df, state=states[symbol], symbol=symbol, df_htf=df_htf)
