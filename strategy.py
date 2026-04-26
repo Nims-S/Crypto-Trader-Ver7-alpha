@@ -460,5 +460,4 @@ def generate_signal(df, state=None, symbol=None, df_htf=None):
     mr_sig = _alt_mean_reversion_long(df, df_htf, symbol, state)
     if mr_sig is not None:
         return mr_sig
-
-    return _btc_long_signal(df, df_htf, symbol, state)
+    return None
