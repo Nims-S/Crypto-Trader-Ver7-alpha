@@ -150,9 +150,29 @@ def init_db():
         )
     """)
 
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS evolution_runs (
+            id BIGSERIAL PRIMARY KEY,
+            cycle_id TEXT NOT NULL,
+            symbol TEXT NOT NULL,
+            timeframe TEXT NOT NULL,
+            parent_strategy_id TEXT,
+            child_strategy_id TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'created',
+            score FLOAT DEFAULT 0,
+            passed BOOLEAN DEFAULT FALSE,
+            parameters JSONB NOT NULL DEFAULT '{}'::jsonb,
+            metrics JSONB NOT NULL DEFAULT '{}'::jsonb,
+            notes TEXT NOT NULL DEFAULT '',
+            created_at TIMESTAMP NOT NULL DEFAULT NOW()
+        )
+    """)
+
     cur.execute("CREATE INDEX IF NOT EXISTS idx_strategy_experiments_strategy_id ON strategy_experiments(strategy_id, created_at DESC)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_strategy_experiments_created_at ON strategy_experiments(created_at DESC)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_strategy_registry_active ON strategy_registry(active, updated_at DESC)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_evolution_runs_cycle_id ON evolution_runs(cycle_id, created_at DESC)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_evolution_runs_child_id ON evolution_runs(child_strategy_id, created_at DESC)")
 
     safe_migrations = [
         ("positions", "opened_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"),
@@ -166,6 +186,7 @@ def init_db():
         ("strategy_registry", "validated_at", "TIMESTAMP"),
         ("strategy_registry", "created_at", "TIMESTAMP NOT NULL DEFAULT NOW()"),
         ("strategy_registry", "updated_at", "TIMESTAMP NOT NULL DEFAULT NOW()"),
+        ("evolution_runs", "created_at", "TIMESTAMP NOT NULL DEFAULT NOW()"),
     ]
     for table, col, col_type in safe_migrations:
         cur.execute(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {col} {col_type}")
