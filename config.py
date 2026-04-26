@@ -26,6 +26,11 @@ BOT_THREAD_ENABLED = os.getenv("BOT_THREAD_ENABLED", "false").strip().lower() in
     "1", "true", "yes", "on"
 }
 
+# SAFE DEFAULT: registry-selected strategies are opt-in.
+ENABLE_REGISTRY_STRATEGIES = os.getenv("ENABLE_REGISTRY_STRATEGIES", "false").strip().lower() in {
+    "1", "true", "yes", "on"
+}
+
 ALLOCATION = {
     "BTC/USDT": float(os.getenv("BTC_ALLOCATION", 0.40)),
     "ETH/USDT": float(os.getenv("ETH_ALLOCATION", 0.18)),
