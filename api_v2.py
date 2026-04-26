@@ -7,6 +7,7 @@ from flask import Blueprint, request, jsonify, Response
 from db import get_conn
 from config import CAPITAL
 from state import get_controls
+from strategy_registry import get_strategy, list_experiments, list_strategies
 
 api_v2 = Blueprint("api_v2", __name__)
 
@@ -132,6 +133,28 @@ def trades():
         "total": total,
         "data": data
     })
+
+
+# ── strategy registry (self-improvement memory) ────────────────────────
+@api_v2.route("/strategy/registry")
+def strategy_registry():
+    active_only = request.args.get("active_only", "false").strip().lower() in {"1", "true", "yes", "on"}
+    return jsonify(list_strategies(active_only=active_only))
+
+
+@api_v2.route("/strategy/registry/<strategy_id>")
+def strategy_registry_item(strategy_id: str):
+    item = get_strategy(strategy_id)
+    if not item:
+        return jsonify({"error": "strategy not found"}), 404
+    return jsonify(item)
+
+
+@api_v2.route("/strategy/experiments")
+def strategy_experiments():
+    strategy_id = request.args.get("strategy_id")
+    limit = min(int(request.args.get("limit", 100)), 500)
+    return jsonify(list_experiments(strategy_id=strategy_id, limit=limit))
 
 
 # ── controls (reuse existing logic) ────────────────────────────────────
