@@ -10,9 +10,9 @@ import pandas as pd
 class StrategyState:
     trades_this_week: int = 0
     allow_shorts: bool = False
-    min_adx: float = 20.0
-    min_atr_rank: float = 0.30
-    min_bb_rank: float = 0.30
+    min_adx: float = 18.0
+    min_atr_rank: float = 0.20
+    min_bb_rank: float = 0.20
     rsi_long: float = 55.0
     rsi_short: float = 45.0
 
@@ -216,7 +216,7 @@ def _long_signal(df_ltf: pd.DataFrame, df_htf: pd.DataFrame, symbol: str, state:
 
     breakout = _safe_float(cur["close"], 0.0) > _swing_high(df_ltf.iloc[:-1], 20)
     pullback = (
-        _safe_float(cur["low"], 0.0) <= _safe_float(cur["ema20"], 0.0) * 1.01
+        _safe_float(cur["low"], 0.0) <= _safe_float(cur["ema20"], 0.0) * 1.015
         and _safe_float(cur["close"], 0.0) > _safe_float(cur["ema20"], 0.0)
         and _safe_float(prev["close"], 0.0) <= _safe_float(prev["ema20"], 0.0)
     )
@@ -225,7 +225,7 @@ def _long_signal(df_ltf: pd.DataFrame, df_htf: pd.DataFrame, symbol: str, state:
     momentum_ok = (
         _safe_float(cur["rsi"], 50.0) >= state.rsi_long
         and _safe_float(cur["macd_hist"], 0.0) > 0.0
-        and _safe_float(cur.get("range_pos", 0.5), 0.5) >= 0.70
+        and _safe_float(cur.get("range_pos", 0.5), 0.5) >= 0.65
     )
 
     if not (trend_ok and vol_ok and structure_ok and momentum_ok):
@@ -240,9 +240,9 @@ def _long_signal(df_ltf: pd.DataFrame, df_htf: pd.DataFrame, symbol: str, state:
         return None
 
     tp1 = entry + (1.5 * risk)
-    tp2 = entry + (3.5 * risk)
-    tp3 = entry + (6.0 * risk)
-    be_rr = 2.5
+    tp2 = entry + (4.0 * risk)
+    tp3 = entry + (7.0 * risk)
+    be_rr = 3.0
     runner = _safe_float(cur["adx"], 0.0) >= 28.0 and _safe_float(cur["rsi"], 0.0) >= 60.0
 
     return Signal(
@@ -251,20 +251,20 @@ def _long_signal(df_ltf: pd.DataFrame, df_htf: pd.DataFrame, symbol: str, state:
         stop_loss=stop_struct,
         take_profit=tp1,
         symbol=symbol,
-        strategy="btc_daily_mf_v2",
+        strategy="btc_daily_mf_v3",
         regime="trend",
         confidence=0.75 if runner else 0.60,
         stop_loss_pct=risk / entry,
         take_profit_pct=(tp1 - entry) / entry,
         secondary_take_profit_pct=(tp2 - entry) / entry,
         tp3_pct=(tp3 - entry) / entry,
-        tp3_close_fraction=0.55,
+        tp3_close_fraction=0.70,
         trail_pct=0.0,
         trail_atr_mult=2.0,
-        tp1_close_fraction=0.10,
-        tp2_close_fraction=0.35,
+        tp1_close_fraction=0.05,
+        tp2_close_fraction=0.25,
         be_trigger_rr=be_rr,
-        max_bars_override=45,
+        max_bars_override=60,
         cooldown_bars=0,
         size_multiplier=1.2 if runner else 1.0,
     )
@@ -309,7 +309,7 @@ def _short_signal(df_ltf: pd.DataFrame, df_htf: pd.DataFrame, symbol: str, state
     momentum_ok = (
         _safe_float(cur["rsi"], 50.0) <= state.rsi_short
         and _safe_float(cur["macd_hist"], 0.0) < 0.0
-        and _safe_float(cur.get("range_pos", 0.5), 0.5) <= 0.30
+        and _safe_float(cur.get("range_pos", 0.5), 0.5) <= 0.35
     )
 
     if not (trend_ok and vol_ok and structure_ok and momentum_ok):
@@ -324,9 +324,9 @@ def _short_signal(df_ltf: pd.DataFrame, df_htf: pd.DataFrame, symbol: str, state
         return None
 
     tp1 = entry - (1.5 * risk)
-    tp2 = entry - (3.5 * risk)
-    tp3 = entry - (6.0 * risk)
-    be_rr = 2.5
+    tp2 = entry - (4.0 * risk)
+    tp3 = entry - (7.0 * risk)
+    be_rr = 3.0
     runner = _safe_float(cur["adx"], 0.0) >= 28.0 and _safe_float(cur["rsi"], 0.0) <= 40.0
 
     return Signal(
@@ -335,20 +335,20 @@ def _short_signal(df_ltf: pd.DataFrame, df_htf: pd.DataFrame, symbol: str, state
         stop_loss=stop_struct,
         take_profit=tp1,
         symbol=symbol,
-        strategy="btc_daily_mf_v2",
+        strategy="btc_daily_mf_v3",
         regime="trend",
         confidence=0.75 if runner else 0.60,
         stop_loss_pct=risk / entry,
         take_profit_pct=(entry - tp1) / entry,
         secondary_take_profit_pct=(entry - tp2) / entry,
         tp3_pct=(entry - tp3) / entry,
-        tp3_close_fraction=0.55,
+        tp3_close_fraction=0.70,
         trail_pct=0.0,
         trail_atr_mult=2.0,
-        tp1_close_fraction=0.10,
-        tp2_close_fraction=0.35,
+        tp1_close_fraction=0.05,
+        tp2_close_fraction=0.25,
         be_trigger_rr=be_rr,
-        max_bars_override=45,
+        max_bars_override=60,
         cooldown_bars=0,
         size_multiplier=1.2 if runner else 1.0,
     )
