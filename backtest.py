@@ -5,6 +5,7 @@ import json
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import ccxt
 import numpy as np
@@ -245,7 +246,16 @@ def _manage_vetf_after_tp1(pos: Position, bar_close: float, bar_ema20: float, tr
     return cash, pos, False
 
 
-def run_backtest(sym, tf, start=None, end=None, allow_shorts=False, max_bars: int = 0, use_cache: bool = True) -> dict:
+def run_backtest(
+    sym,
+    tf,
+    start=None,
+    end=None,
+    allow_shorts=False,
+    max_bars: int = 0,
+    use_cache: bool = True,
+    strategy_override: dict[str, Any] | None = None,
+) -> dict:
     since = _to_ms(start)
     until = _to_ms(end)
 
@@ -278,6 +288,17 @@ def run_backtest(sym, tf, start=None, end=None, allow_shorts=False, max_bars: in
     eq: list[float] = []
     cool = -1
     state = StrategyState(allow_shorts=allow_shorts)
+    if strategy_override:
+        params = strategy_override.get("parameters") or {}
+        state = StrategyState(
+            trades_this_week=state.trades_this_week,
+            allow_shorts=bool(params.get("allow_shorts", state.allow_shorts)),
+            min_adx=float(params.get("min_adx", state.min_adx)),
+            min_atr_rank=float(params.get("min_atr_rank", state.min_atr_rank)),
+            min_bb_rank=float(params.get("min_bb_rank", state.min_bb_rank)),
+            rsi_long=float(params.get("rsi_long", state.rsi_long)),
+            rsi_short=float(params.get("rsi_short", state.rsi_short)),
+        )
     start_idx = max(260, 50)
 
     for i in range(start_idx, len(df) - 1):
@@ -364,7 +385,7 @@ def run_backtest(sym, tf, start=None, end=None, allow_shorts=False, max_bars: in
             w = df.iloc[: i + 1]
             htf_end = htf_pos[idx]
             htf_slice = df_htf.iloc[: htf_end + 1] if htf_end >= 0 else df_htf.iloc[:0]
-            sig = generate_signal(w, state=state, symbol=sym, df_htf=htf_slice)
+            sig = generate_signal(w, state=state, symbol=sym, df_htf=htf_slice, strategy_override=strategy_override)
 
             if sig and sig.side in {"LONG", "SHORT"}:
                 ep = _slip(float(bar["open"]), bar_atr, bar_close, sig.side)
