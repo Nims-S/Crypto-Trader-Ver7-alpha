@@ -240,9 +240,9 @@ def _long_signal(df_ltf: pd.DataFrame, df_htf: pd.DataFrame, symbol: str, state:
         return None
 
     tp1 = entry + (1.5 * risk)
-    tp2 = entry + (3.0 * risk)
-    tp3 = entry + (5.0 * risk)
-    be_rr = 2.0
+    tp2 = entry + (3.5 * risk)
+    tp3 = entry + (6.0 * risk)
+    be_rr = 2.5
     runner = _safe_float(cur["adx"], 0.0) >= 28.0 and _safe_float(cur["rsi"], 0.0) >= 60.0
 
     return Signal(
@@ -251,20 +251,20 @@ def _long_signal(df_ltf: pd.DataFrame, df_htf: pd.DataFrame, symbol: str, state:
         stop_loss=stop_struct,
         take_profit=tp1,
         symbol=symbol,
-        strategy="btc_daily_mf_v1",
+        strategy="btc_daily_mf_v2",
         regime="trend",
         confidence=0.75 if runner else 0.60,
         stop_loss_pct=risk / entry,
         take_profit_pct=(tp1 - entry) / entry,
         secondary_take_profit_pct=(tp2 - entry) / entry,
         tp3_pct=(tp3 - entry) / entry,
-        tp3_close_fraction=0.25,
+        tp3_close_fraction=0.55,
         trail_pct=0.0,
         trail_atr_mult=2.0,
-        tp1_close_fraction=0.25,
-        tp2_close_fraction=0.50,
+        tp1_close_fraction=0.10,
+        tp2_close_fraction=0.35,
         be_trigger_rr=be_rr,
-        max_bars_override=30,
+        max_bars_override=45,
         cooldown_bars=0,
         size_multiplier=1.2 if runner else 1.0,
     )
@@ -324,9 +324,9 @@ def _short_signal(df_ltf: pd.DataFrame, df_htf: pd.DataFrame, symbol: str, state
         return None
 
     tp1 = entry - (1.5 * risk)
-    tp2 = entry - (3.0 * risk)
-    tp3 = entry - (5.0 * risk)
-    be_rr = 2.0
+    tp2 = entry - (3.5 * risk)
+    tp3 = entry - (6.0 * risk)
+    be_rr = 2.5
     runner = _safe_float(cur["adx"], 0.0) >= 28.0 and _safe_float(cur["rsi"], 0.0) <= 40.0
 
     return Signal(
@@ -335,20 +335,20 @@ def _short_signal(df_ltf: pd.DataFrame, df_htf: pd.DataFrame, symbol: str, state
         stop_loss=stop_struct,
         take_profit=tp1,
         symbol=symbol,
-        strategy="btc_daily_mf_v1",
+        strategy="btc_daily_mf_v2",
         regime="trend",
         confidence=0.75 if runner else 0.60,
         stop_loss_pct=risk / entry,
         take_profit_pct=(entry - tp1) / entry,
         secondary_take_profit_pct=(entry - tp2) / entry,
         tp3_pct=(entry - tp3) / entry,
-        tp3_close_fraction=0.25,
+        tp3_close_fraction=0.55,
         trail_pct=0.0,
         trail_atr_mult=2.0,
-        tp1_close_fraction=0.25,
-        tp2_close_fraction=0.50,
+        tp1_close_fraction=0.10,
+        tp2_close_fraction=0.35,
         be_trigger_rr=be_rr,
-        max_bars_override=30,
+        max_bars_override=45,
         cooldown_bars=0,
         size_multiplier=1.2 if runner else 1.0,
     )
