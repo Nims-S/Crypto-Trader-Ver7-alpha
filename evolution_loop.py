@@ -11,7 +11,7 @@ from __future__ import annotations
 import argparse
 import json
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from backtest import run_backtest
@@ -34,7 +34,7 @@ DEFAULT_TIMEFRAMES = ["1d", "4h"]
 
 
 def _now_iso() -> str:
-    return datetime.utcnow().isoformat(timespec="seconds") + "Z"
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
 def _safe_float(value: Any, default: float = 0.0) -> float:
@@ -197,7 +197,7 @@ def evolve_once(
                         "test": test,
                     })
 
-                summary = summarize_walk_forward_reports(fold_reports)
+                summary = summarize_walk_forward_reports(fold_reports, timeframe=timeframe)
 
                 status = "validated" if summary["passed"] else "rejected"
 
