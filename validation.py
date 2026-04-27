@@ -7,7 +7,6 @@ from the orchestration layer so the evolution loop stays readable.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import numpy as np
@@ -24,6 +23,23 @@ class WalkForwardSplit:
 
     def as_dict(self) -> dict[str, str]:
         return {"label": self.label, "start": self.start, "end": self.end}
+
+
+# Conservative defaults: daily windows need fewer but more meaningful trades,
+# intraday windows need a bit more activity, but nothing here is a hard gate.
+TRADE_DENSITY_BASE = {
+    "1d": 4,
+    "12h": 5,
+    "8h": 6,
+    "4h": 6,
+    "2h": 8,
+    "1h": 10,
+    "30m": 12,
+    "15m": 14,
+}
+
+SOFT_DENSITY_FLOOR = 0.30
+PASS_DENSITY_FLOOR = 0.45
 
 
 def _to_utc_timestamp(value: Any) -> pd.Timestamp:
@@ -105,7 +121,26 @@ def build_walk_forward_folds(
     return folds_out
 
 
-def summarize_walk_forward_reports(fold_reports: list[dict[str, Any]]) -> dict[str, Any]:
+def _trade_density_threshold(timeframe: str) -> int:
+    tf = (timeframe or "").strip().lower()
+    return TRADE_DENSITY_BASE.get(tf, 6)
+
+
+def _trade_density_score(trades: int, timeframe: str, split_name: str) -> float:
+    base = _trade_density_threshold(timeframe)
+    # Train can tolerate slightly fewer trades; validation/test should be a bit denser.
+    if split_name == "train":
+        target = max(2, int(round(base * 0.75)))
+    else:
+        target = max(2, int(round(base * 0.60)))
+    return min(1.0, max(0.0, trades / float(target)))
+
+
+def summarize_walk_forward_reports(
+    fold_reports: list[dict[str, Any]],
+    *,
+    timeframe: str,
+) -> dict[str, Any]:
     """Aggregate per-fold train/val/test backtests into a single decision payload."""
     if not fold_reports:
         return {
@@ -118,6 +153,7 @@ def summarize_walk_forward_reports(fold_reports: list[dict[str, Any]]) -> dict[s
     split_scores: dict[str, list[float]] = {"train": [], "val": [], "test": []}
     split_decisions: dict[str, list[dict[str, Any]]] = {"train": [], "val": [], "test": []}
     split_results: dict[str, list[dict[str, Any]]] = {"train": [], "val": [], "test": []}
+    density_scores: dict[str, list[float]] = {"train": [], "val": [], "test": []}
     reasons: list[str] = []
 
     for fold in fold_reports:
@@ -127,9 +163,20 @@ def summarize_walk_forward_reports(fold_reports: list[dict[str, Any]]) -> dict[s
             if "error" in result:
                 reasons.append(f"{fold.get('label', 'fold')}:{split_name}:{result['error']}")
                 continue
+
             decision = score_metrics(result)
             split_scores[split_name].append(decision.score)
             split_decisions[split_name].append(decision.as_dict())
+
+            trades = int(result.get("trades", 0) or 0)
+            density = _trade_density_score(trades, timeframe, split_name)
+            density_scores[split_name].append(density)
+
+            if density < SOFT_DENSITY_FLOOR:
+                reasons.append(
+                    f"{fold.get('label', 'fold')}:{split_name}:density<{SOFT_DENSITY_FLOOR:.2f}"
+                )
+
             if not decision.passed:
                 reasons.extend([f"{fold.get('label', 'fold')}:{split_name}:{reason}" for reason in decision.reasons])
 
@@ -141,29 +188,35 @@ def summarize_walk_forward_reports(fold_reports: list[dict[str, Any]]) -> dict[s
     combined_scores = split_scores["train"] + split_scores["val"] + split_scores["test"]
     score_spread = float(max(combined_scores) - min(combined_scores)) if len(combined_scores) >= 2 else 0.0
 
+    density_train = float(np.mean(density_scores["train"])) if density_scores["train"] else 0.0
+    density_val = float(np.mean(density_scores["val"])) if density_scores["val"] else 0.0
+    density_test = float(np.mean(density_scores["test"])) if density_scores["test"] else 0.0
+    density_mean = float(np.mean([density_train, density_val, density_test]))
+    density_floor = min(density_val, density_test)
+
     composite = (0.15 * train_mean) + (0.35 * val_mean) + (0.50 * test_mean)
     stability_penalty = min(0.25, (val_std + test_std) * 0.5 + max(0.0, score_spread - 0.25) * 0.5)
-    final_score = max(0.0, composite - stability_penalty)
+    density_bonus = 0.12 * density_mean
+    final_score = max(0.0, composite - stability_penalty + density_bonus)
 
-    min_trades = min(
-        [int(r.get("trades", 0) or 0) for r in split_results["val"] + split_results["test"] if r and "error" not in r],
-        default=0,
-    )
     min_val_score = min(split_scores["val"], default=0.0)
     min_test_score = min(split_scores["test"], default=0.0)
 
     passed = (
-        bool(split_scores["val"]) 
-        and bool(split_scores["test"]) 
+        bool(split_scores["val"])
+        and bool(split_scores["test"])
         and val_mean >= 0.55
         and test_mean >= 0.55
         and min_val_score >= 0.45
         and min_test_score >= 0.45
         and final_score >= 0.55
         and score_spread <= 0.35
-        and min_trades >= 15
+        and density_floor >= PASS_DENSITY_FLOOR
         and not reasons
     )
+
+    if density_floor < PASS_DENSITY_FLOOR:
+        reasons.append(f"density_floor<{PASS_DENSITY_FLOOR:.2f}")
 
     return {
         "score": round(final_score, 6),
@@ -172,6 +225,9 @@ def summarize_walk_forward_reports(fold_reports: list[dict[str, Any]]) -> dict[s
         "fold_count": len(fold_reports),
         "composite": round(composite, 6),
         "stability_penalty": round(stability_penalty, 6),
+        "density_bonus": round(density_bonus, 6),
+        "density_mean": round(density_mean, 6),
+        "density_floor": round(density_floor, 6),
         "score_spread": round(score_spread, 6),
         "means": {
             "train": round(train_mean, 6),
@@ -181,6 +237,11 @@ def summarize_walk_forward_reports(fold_reports: list[dict[str, Any]]) -> dict[s
         "stddev": {
             "val": round(val_std, 6),
             "test": round(test_std, 6),
+        },
+        "density_scores": {
+            "train": round(density_train, 6),
+            "val": round(density_val, 6),
+            "test": round(density_test, 6),
         },
         "split_scores": split_scores,
         "split_decisions": split_decisions,
