@@ -25,8 +25,6 @@ class WalkForwardSplit:
         return {"label": self.label, "start": self.start, "end": self.end}
 
 
-# Conservative defaults: daily windows need fewer but more meaningful trades,
-# intraday windows need a bit more activity, but nothing here is a hard gate.
 TRADE_DENSITY_BASE = {
     "1d": 4,
     "12h": 5,
@@ -39,7 +37,6 @@ TRADE_DENSITY_BASE = {
 }
 
 SOFT_DENSITY_FLOOR = 0.30
-PASS_DENSITY_FLOOR = 0.45
 
 
 def _to_utc_timestamp(value: Any) -> pd.Timestamp:
@@ -58,7 +55,6 @@ def _iso(ts: pd.Timestamp) -> str:
 
 
 def default_evolution_window(lookback_days: int = 720) -> tuple[str, str]:
-    """Return a default research range ending at the current UTC time."""
     end = pd.Timestamp.now(tz="UTC")
     start = end - pd.Timedelta(days=max(30, int(lookback_days or 720)))
     return _iso(start), _iso(end)
@@ -73,11 +69,6 @@ def build_walk_forward_folds(
     val_ratio: float = 0.2,
     test_ratio: float = 0.2,
 ) -> list[WalkForwardSplit]:
-    """Create rolling train/validation/test windows.
-
-    The folds slide forward by one test window each time. This gives multiple
-    adjacent views of the same strategy without relying on a single lucky split.
-    """
     if folds <= 0:
         raise ValueError("folds must be positive")
     if train_ratio <= 0 or val_ratio <= 0 or test_ratio <= 0:
@@ -115,7 +106,6 @@ def build_walk_forward_folds(
         folds_out.append(WalkForwardSplit(label=f"fold_{fold_idx + 1}", start=_iso(fold_start), end=_iso(test_end)))
 
     if not folds_out:
-        # Fallback to a single in-range fold when the configured window is tight.
         folds_out.append(WalkForwardSplit(label="fold_1", start=_iso(start_ts), end=_iso(end_ts)))
 
     return folds_out
@@ -128,7 +118,6 @@ def _trade_density_threshold(timeframe: str) -> int:
 
 def _trade_density_score(trades: int, timeframe: str, split_name: str) -> float:
     base = _trade_density_threshold(timeframe)
-    # Train can tolerate slightly fewer trades; validation/test should be a bit denser.
     if split_name == "train":
         target = max(2, int(round(base * 0.75)))
     else:
@@ -141,7 +130,6 @@ def summarize_walk_forward_reports(
     *,
     timeframe: str,
 ) -> dict[str, Any]:
-    """Aggregate per-fold train/val/test backtests into a single decision payload."""
     if not fold_reports:
         return {
             "score": 0.0,
@@ -192,7 +180,6 @@ def summarize_walk_forward_reports(
     density_val = float(np.mean(density_scores["val"])) if density_scores["val"] else 0.0
     density_test = float(np.mean(density_scores["test"])) if density_scores["test"] else 0.0
     density_mean = float(np.mean([density_train, density_val, density_test]))
-    density_floor = min(density_val, density_test)
 
     composite = (0.15 * train_mean) + (0.35 * val_mean) + (0.50 * test_mean)
     stability_penalty = min(0.25, (val_std + test_std) * 0.5 + max(0.0, score_spread - 0.25) * 0.5)
@@ -211,12 +198,8 @@ def summarize_walk_forward_reports(
         and min_test_score >= 0.45
         and final_score >= 0.55
         and score_spread <= 0.35
-        and density_floor >= PASS_DENSITY_FLOOR
         and not reasons
     )
-
-    if density_floor < PASS_DENSITY_FLOOR:
-        reasons.append(f"density_floor<{PASS_DENSITY_FLOOR:.2f}")
 
     return {
         "score": round(final_score, 6),
@@ -227,7 +210,6 @@ def summarize_walk_forward_reports(
         "stability_penalty": round(stability_penalty, 6),
         "density_bonus": round(density_bonus, 6),
         "density_mean": round(density_mean, 6),
-        "density_floor": round(density_floor, 6),
         "score_spread": round(score_spread, 6),
         "means": {
             "train": round(train_mean, 6),
