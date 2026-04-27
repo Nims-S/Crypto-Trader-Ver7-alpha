@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -186,6 +187,16 @@ def _safe_float(v, default: float = 0.0) -> float:
     return default
 
 
+def _safe_bool(v, default: bool = False) -> bool:
+    if isinstance(v, bool):
+        return v
+    if isinstance(v, (int, float)):
+        return bool(v)
+    if isinstance(v, str):
+        return v.strip().lower() in {"1", "true", "yes", "on"}
+    return default
+
+
 def _daily_context(df: pd.DataFrame):
     return df.iloc[-1], df.iloc[-2]
 
@@ -217,6 +228,30 @@ def _volume_breakout_ok(df: pd.DataFrame) -> bool:
     return vma > 0 and vol >= 1.25 * vma
 
 
+def _params(strategy_override: dict[str, Any] | None) -> dict[str, Any]:
+    return (strategy_override or {}).get("parameters") or {}
+
+
+def _entry_mode(params: dict[str, Any]) -> str:
+    return str(params.get("entry_mode", "mean_reversion") or "mean_reversion").strip().lower()
+
+
+def _flag(params: dict[str, Any], key: str, default: bool = True) -> bool:
+    return _safe_bool(params.get(key, default), default)
+
+
+def _build_state(state: StrategyState, params: dict[str, Any]) -> StrategyState:
+    return StrategyState(
+        trades_this_week=state.trades_this_week,
+        allow_shorts=_flag(params, "allow_shorts", state.allow_shorts),
+        min_adx=_safe_float(params.get("min_adx", state.min_adx), state.min_adx),
+        min_atr_rank=_safe_float(params.get("min_atr_rank", state.min_atr_rank), state.min_atr_rank),
+        min_bb_rank=_safe_float(params.get("min_bb_rank", state.min_bb_rank), state.min_bb_rank),
+        rsi_long=_safe_float(params.get("rsi_long", state.rsi_long), state.rsi_long),
+        rsi_short=_safe_float(params.get("rsi_short", state.rsi_short), state.rsi_short),
+    )
+
+
 def _vetf_long(df_ltf: pd.DataFrame, df_htf: pd.DataFrame, symbol: str, state: StrategyState):
     if len(df_ltf) < 220 or len(df_htf) < 30:
         return None
@@ -226,7 +261,7 @@ def _vetf_long(df_ltf: pd.DataFrame, df_htf: pd.DataFrame, symbol: str, state: S
     if df_ltf is None or df_htf is None:
         return None
 
-    cur, prev = _daily_context(df_ltf)
+    cur, _ = _daily_context(df_ltf)
     htf_cur = df_htf.iloc[-1]
 
     if _in_cash_mode(df_ltf) and not (_vol_expansion_recent(df_ltf) and _volume_breakout_ok(df_ltf)):
@@ -238,14 +273,14 @@ def _vetf_long(df_ltf: pd.DataFrame, df_htf: pd.DataFrame, symbol: str, state: S
         and _safe_float(htf_cur["close"], 0.0) > _safe_float(htf_cur["sma200"], 0.0)
         and _trend_slope_ok(htf_cur, bullish=True)
     )
+    if not trend_ok:
+        return None
 
-    vol_ok = _vol_expansion_recent(df_ltf) and _volume_breakout_ok(df_ltf)
-    if not (trend_ok and vol_ok):
+    if not (_vol_expansion_recent(df_ltf) and _volume_breakout_ok(df_ltf)):
         return None
 
     swing_high = _swing_high(df_ltf.iloc[:-1], 20)
-    structure_ok = _safe_float(cur["close"], 0.0) > swing_high
-    if not structure_ok:
+    if _safe_float(cur["close"], 0.0) <= swing_high:
         return None
 
     entry = _safe_float(cur["close"], 0.0)
@@ -261,7 +296,7 @@ def _vetf_long(df_ltf: pd.DataFrame, df_htf: pd.DataFrame, symbol: str, state: S
 
     risk = entry - stop
     tp1 = entry + (2.0 * risk)
-    tp2 = entry + (999.0 * risk)  # unused because EMA20 trail handles the remainder
+    tp2 = entry + (999.0 * risk)
 
     return Signal(
         side="LONG",
@@ -296,7 +331,7 @@ def _vetf_short(df_ltf: pd.DataFrame, df_htf: pd.DataFrame, symbol: str, state: 
     if df_ltf is None or df_htf is None:
         return None
 
-    cur, prev = _daily_context(df_ltf)
+    cur, _ = _daily_context(df_ltf)
     htf_cur = df_htf.iloc[-1]
 
     if _in_cash_mode(df_ltf) and not (_vol_expansion_recent(df_ltf) and _volume_breakout_ok(df_ltf)):
@@ -308,14 +343,14 @@ def _vetf_short(df_ltf: pd.DataFrame, df_htf: pd.DataFrame, symbol: str, state: 
         and _safe_float(htf_cur["close"], 0.0) < _safe_float(htf_cur["sma200"], 0.0)
         and _trend_slope_ok(htf_cur, bullish=False)
     )
+    if not trend_ok:
+        return None
 
-    vol_ok = _vol_expansion_recent(df_ltf) and _volume_breakout_ok(df_ltf)
-    if not (trend_ok and vol_ok):
+    if not (_vol_expansion_recent(df_ltf) and _volume_breakout_ok(df_ltf)):
         return None
 
     swing_low = _swing_low(df_ltf.iloc[:-1], 20)
-    structure_ok = _safe_float(cur["close"], 0.0) < swing_low
-    if not structure_ok:
+    if _safe_float(cur["close"], 0.0) >= swing_low:
         return None
 
     entry = _safe_float(cur["close"], 0.0)
@@ -357,7 +392,7 @@ def _vetf_short(df_ltf: pd.DataFrame, df_htf: pd.DataFrame, symbol: str, state: 
     )
 
 
-def _alt_mean_reversion_long(df_ltf: pd.DataFrame, df_htf: pd.DataFrame, symbol: str, state: StrategyState):
+def _alt_mean_reversion_long(df_ltf: pd.DataFrame, df_htf: pd.DataFrame, symbol: str, state: StrategyState, params: dict[str, Any]):
     if len(df_ltf) < 180 or len(df_htf) < 26:
         return None
 
@@ -383,6 +418,11 @@ def _alt_mean_reversion_long(df_ltf: pd.DataFrame, df_htf: pd.DataFrame, symbol:
         _safe_float(htf_cur["close"], 0.0) >= _safe_float(htf_cur["sma200"], 0.0) * 0.90
         or _safe_float(htf_cur["ema20"], 0.0) >= _safe_float(htf_cur["ema50"], 0.0) * 0.96
     )
+    trend_bias = (
+        _safe_float(cur["close"], 0.0) >= _safe_float(cur["ema200"], 0.0) * 0.95
+        or _safe_float(cur["ema20"], 0.0) >= _safe_float(cur["ema50"], 0.0) * 0.96
+    )
+    structure_ok = _safe_float(cur.get("range_pos", 0.5), 0.5) <= 0.45 or _safe_float(cur["close"], 0.0) >= _safe_float(cur["swing_low_20"], 0.0) * 1.0
     momentum_turn = (
         _safe_float(cur["rsi"], 50.0) <= 46.0
         and _safe_float(cur["macd_hist"], 0.0) >= _safe_float(prev["macd_hist"], 0.0) * 0.90
@@ -393,7 +433,17 @@ def _alt_mean_reversion_long(df_ltf: pd.DataFrame, df_htf: pd.DataFrame, symbol:
         and _safe_float(cur["bb_width_rank"], 0.0) >= max(0.08, state.min_bb_rank * 0.75)
     )
 
-    if not (oversold and reclaim and htf_filter and momentum_turn and vol_ok):
+    if _flag(params, "use_htf_filter", True) and not htf_filter:
+        return None
+    if _flag(params, "use_trend_filter", True) and not trend_bias:
+        return None
+    if _flag(params, "use_structure_filter", True) and not structure_ok:
+        return None
+    if _flag(params, "use_reclaim_filter", True) and not reclaim:
+        return None
+    if _flag(params, "use_volume_filter", True) and not vol_ok:
+        return None
+    if not oversold or not momentum_turn:
         return None
 
     entry = _safe_float(cur["close"], 0.0)
@@ -437,7 +487,7 @@ def _alt_mean_reversion_long(df_ltf: pd.DataFrame, df_htf: pd.DataFrame, symbol:
     )
 
 
-def _alt_trend_pullback_long(df_ltf: pd.DataFrame, df_htf: pd.DataFrame, symbol: str, state: StrategyState):
+def _alt_trend_pullback_long(df_ltf: pd.DataFrame, df_htf: pd.DataFrame, symbol: str, state: StrategyState, params: dict[str, Any]):
     if len(df_ltf) < 180 or len(df_htf) < 26:
         return None
 
@@ -456,7 +506,6 @@ def _alt_trend_pullback_long(df_ltf: pd.DataFrame, df_htf: pd.DataFrame, symbol:
         and _safe_float(htf_cur["close"], 0.0) >= _safe_float(htf_cur["ema200"], 0.0) * 0.90
         and _safe_float(htf_cur["ema20"], 0.0) >= _safe_float(htf_prev["ema20"], 0.0) * 0.995
     )
-
     pullback = (
         _safe_float(cur["low"], 0.0) <= _safe_float(cur["ema20"], 0.0) * 1.02
         or _safe_float(cur["close"], 0.0) <= _safe_float(cur["bb_mid"], 0.0) * 1.02
@@ -477,7 +526,17 @@ def _alt_trend_pullback_long(df_ltf: pd.DataFrame, df_htf: pd.DataFrame, symbol:
         and _safe_float(cur["bb_width_rank"], 0.0) >= max(0.08, state.min_bb_rank * 0.75)
     )
 
-    if not (trend_ok and pullback and reclaim and momentum_ok and vol_ok):
+    if _flag(params, "use_htf_filter", True) and not trend_ok:
+        return None
+    if _flag(params, "use_trend_filter", True) and not trend_ok:
+        return None
+    if _flag(params, "use_reclaim_filter", True) and not reclaim:
+        return None
+    if _flag(params, "use_volume_filter", True) and not vol_ok:
+        return None
+    if _flag(params, "use_structure_filter", True) and not pullback:
+        return None
+    if not momentum_ok:
         return None
 
     entry = _safe_float(cur["close"], 0.0)
@@ -521,6 +580,158 @@ def _alt_trend_pullback_long(df_ltf: pd.DataFrame, df_htf: pd.DataFrame, symbol:
     )
 
 
+def _alt_breakout_long(df_ltf: pd.DataFrame, df_htf: pd.DataFrame, symbol: str, state: StrategyState, params: dict[str, Any]):
+    if len(df_ltf) < 180 or len(df_htf) < 26:
+        return None
+
+    df_ltf = _prepare(df_ltf)
+    df_htf = _prepare(df_htf)
+    if df_ltf is None or df_htf is None:
+        return None
+
+    cur, prev = _daily_context(df_ltf)
+    htf_cur = df_htf.iloc[-1]
+
+    breakout_trigger = _safe_float(cur["close"], 0.0) >= max(_safe_float(cur["bb_upper"], 0.0), _safe_float(cur["swing_high_20"], 0.0)) * 0.998
+    htf_trend_ok = _safe_float(htf_cur["close"], 0.0) >= _safe_float(htf_cur["sma200"], 0.0) * 0.90 or _safe_float(htf_cur["ema20"], 0.0) >= _safe_float(htf_cur["ema50"], 0.0) * 0.98
+    trend_ok = _safe_float(cur["close"], 0.0) >= _safe_float(cur["ema200"], 0.0) * 0.97 and _safe_float(cur["ema50"], 0.0) >= _safe_float(cur["ema200"], 0.0) * 0.985
+    reclaim_ok = _safe_float(cur["close"], 0.0) >= _safe_float(cur["open"], 0.0) and _safe_float(cur["close"], 0.0) >= _safe_float(prev["close"], 0.0) * 0.995
+    volume_ok = _volume_breakout_ok(df_ltf)
+    structure_ok = _safe_float(cur["close"], 0.0) >= _safe_float(cur["swing_high_20"], 0.0) * 0.998
+    vol_regime_ok = _safe_float(cur["atr_pct_rank"], 0.0) >= max(0.08, state.min_atr_rank * 0.75) and _safe_float(cur["bb_width_rank"], 0.0) >= max(0.08, state.min_bb_rank * 0.75)
+
+    if _flag(params, "use_breakout_filter", True) and not breakout_trigger:
+        return None
+    if _flag(params, "use_htf_filter", True) and not htf_trend_ok:
+        return None
+    if _flag(params, "use_trend_filter", True) and not trend_ok:
+        return None
+    if _flag(params, "use_reclaim_filter", True) and not reclaim_ok:
+        return None
+    if _flag(params, "use_volume_filter", True) and not volume_ok:
+        return None
+    if _flag(params, "use_structure_filter", True) and not structure_ok:
+        return None
+    if not vol_regime_ok:
+        return None
+
+    entry = _safe_float(cur["close"], 0.0)
+    atr = _safe_float(cur["atr"], 0.0)
+    if entry <= 0 or atr <= 0:
+        return None
+
+    stop = min(_swing_low(df_ltf.iloc[:-1], 20) * 0.995, entry - (1.35 * atr))
+    if stop >= entry:
+        return None
+
+    risk = entry - stop
+    tp1 = entry + (1.40 * risk)
+    tp2 = entry + (3.10 * risk)
+    tp3 = entry + (5.00 * risk)
+    strong_breakout = breakout_trigger and volume_ok and trend_ok
+
+    return Signal(
+        side="LONG",
+        entry_price=entry,
+        stop_loss=stop,
+        take_profit=tp1,
+        symbol=symbol,
+        strategy="alt_breakout_v1",
+        regime="breakout",
+        confidence=0.72 if strong_breakout else 0.60,
+        stop_loss_pct=risk / entry,
+        take_profit_pct=(tp1 - entry) / entry,
+        secondary_take_profit_pct=(tp2 - entry) / entry,
+        tp3_pct=(tp3 - entry) / entry,
+        tp3_close_fraction=0.20,
+        trail_ema20=False,
+        trail_pct=0.0,
+        trail_atr_mult=1.7,
+        tp1_close_fraction=0.20,
+        tp2_close_fraction=0.45,
+        be_trigger_rr=1.8,
+        max_bars_override=18,
+        cooldown_bars=0,
+        size_multiplier=1.0 if strong_breakout else 0.9,
+    )
+
+
+def _alt_breakout_short(df_ltf: pd.DataFrame, df_htf: pd.DataFrame, symbol: str, state: StrategyState, params: dict[str, Any]):
+    if not state.allow_shorts or len(df_ltf) < 180 or len(df_htf) < 26:
+        return None
+
+    df_ltf = _prepare(df_ltf)
+    df_htf = _prepare(df_htf)
+    if df_ltf is None or df_htf is None:
+        return None
+
+    cur, prev = _daily_context(df_ltf)
+    htf_cur = df_htf.iloc[-1]
+
+    breakdown_trigger = _safe_float(cur["close"], 0.0) <= min(_safe_float(cur["bb_lower"], 0.0), _safe_float(cur["swing_low_20"], 0.0)) * 1.002
+    htf_trend_ok = _safe_float(htf_cur["close"], 0.0) <= _safe_float(htf_cur["sma200"], 0.0) * 1.10 or _safe_float(htf_cur["ema20"], 0.0) <= _safe_float(htf_cur["ema50"], 0.0) * 1.02
+    trend_ok = _safe_float(cur["close"], 0.0) <= _safe_float(cur["ema200"], 0.0) * 1.03 and _safe_float(cur["ema50"], 0.0) <= _safe_float(cur["ema200"], 0.0) * 1.015
+    reclaim_ok = _safe_float(cur["close"], 0.0) <= _safe_float(cur["open"], 0.0) and _safe_float(cur["close"], 0.0) <= _safe_float(prev["close"], 0.0) * 1.005
+    volume_ok = _volume_breakout_ok(df_ltf)
+    structure_ok = _safe_float(cur["close"], 0.0) <= _safe_float(cur["swing_low_20"], 0.0) * 1.002
+    vol_regime_ok = _safe_float(cur["atr_pct_rank"], 0.0) >= max(0.08, state.min_atr_rank * 0.75) and _safe_float(cur["bb_width_rank"], 0.0) >= max(0.08, state.min_bb_rank * 0.75)
+
+    if _flag(params, "use_breakout_filter", True) and not breakdown_trigger:
+        return None
+    if _flag(params, "use_htf_filter", True) and not htf_trend_ok:
+        return None
+    if _flag(params, "use_trend_filter", True) and not trend_ok:
+        return None
+    if _flag(params, "use_reclaim_filter", True) and not reclaim_ok:
+        return None
+    if _flag(params, "use_volume_filter", True) and not volume_ok:
+        return None
+    if _flag(params, "use_structure_filter", True) and not structure_ok:
+        return None
+    if not vol_regime_ok:
+        return None
+
+    entry = _safe_float(cur["close"], 0.0)
+    atr = _safe_float(cur["atr"], 0.0)
+    if entry <= 0 or atr <= 0:
+        return None
+
+    stop = max(_swing_high(df_ltf.iloc[:-1], 20) * 1.005, entry + (1.35 * atr))
+    if stop <= entry:
+        return None
+
+    risk = stop - entry
+    tp1 = entry - (1.40 * risk)
+    tp2 = entry - (3.10 * risk)
+    tp3 = entry - (5.00 * risk)
+    strong_breakdown = breakdown_trigger and volume_ok and trend_ok
+
+    return Signal(
+        side="SHORT",
+        entry_price=entry,
+        stop_loss=stop,
+        take_profit=tp1,
+        symbol=symbol,
+        strategy="alt_breakout_v1",
+        regime="breakout",
+        confidence=0.72 if strong_breakdown else 0.60,
+        stop_loss_pct=risk / entry,
+        take_profit_pct=(entry - tp1) / entry,
+        secondary_take_profit_pct=(entry - tp2) / entry,
+        tp3_pct=(entry - tp3) / entry,
+        tp3_close_fraction=0.20,
+        trail_ema20=False,
+        trail_pct=0.0,
+        trail_atr_mult=1.7,
+        tp1_close_fraction=0.20,
+        tp2_close_fraction=0.45,
+        be_trigger_rr=1.8,
+        max_bars_override=18,
+        cooldown_bars=0,
+        size_multiplier=1.0 if strong_breakdown else 0.9,
+    )
+
+
 def generate_signal(df, state=None, symbol=None, df_htf=None, strategy_override=None):
     if df is None or df.empty:
         return None
@@ -530,17 +741,9 @@ def generate_signal(df, state=None, symbol=None, df_htf=None, strategy_override=
     if df_htf is None or df_htf.empty:
         return None
 
-    if strategy_override:
-        params = strategy_override.get("parameters") or {}
-        state = StrategyState(
-            trades_this_week=state.trades_this_week,
-            allow_shorts=bool(params.get("allow_shorts", state.allow_shorts)),
-            min_adx=float(params.get("min_adx", state.min_adx)),
-            min_atr_rank=float(params.get("min_atr_rank", state.min_atr_rank)),
-            min_bb_rank=float(params.get("min_bb_rank", state.min_bb_rank)),
-            rsi_long=float(params.get("rsi_long", state.rsi_long)),
-            rsi_short=float(params.get("rsi_short", state.rsi_short)),
-        )
+    params = _params(strategy_override)
+    state = _build_state(state, params)
+    entry_mode = _entry_mode(params)
 
     if symbol == "BTC/USDT":
         long_sig = _vetf_long(df, df_htf, symbol, state)
@@ -548,12 +751,28 @@ def generate_signal(df, state=None, symbol=None, df_htf=None, strategy_override=
             return long_sig
         return _vetf_short(df, df_htf, symbol, state)
 
-    mr_sig = _alt_mean_reversion_long(df, df_htf, symbol, state)
+    if entry_mode == "breakout":
+        sig = _alt_breakout_long(df, df_htf, symbol, state, params)
+        if sig is not None:
+            return sig
+        return _alt_breakout_short(df, df_htf, symbol, state, params)
+
+    if entry_mode == "trend_pullback":
+        sig = _alt_trend_pullback_long(df, df_htf, symbol, state, params)
+        if sig is not None:
+            return sig
+        return _alt_breakout_long(df, df_htf, symbol, state, params) if _flag(params, "use_breakout_filter", False) else None
+
+    mr_sig = _alt_mean_reversion_long(df, df_htf, symbol, state, params)
     if mr_sig is not None:
         return mr_sig
 
-    trend_sig = _alt_trend_pullback_long(df, df_htf, symbol, state)
+    trend_sig = _alt_trend_pullback_long(df, df_htf, symbol, state, params)
     if trend_sig is not None:
         return trend_sig
 
-    return None
+    breakout_sig = _alt_breakout_long(df, df_htf, symbol, state, params)
+    if breakout_sig is not None:
+        return breakout_sig
+
+    return _alt_breakout_short(df, df_htf, symbol, state, params)
