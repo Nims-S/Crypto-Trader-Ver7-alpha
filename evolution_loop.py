@@ -15,9 +15,14 @@ from datetime import datetime
 from typing import Any
 
 from backtest import run_backtest
-from db import get_conn, init_db
+from db import init_db
 from mutation_engine import MutationSpec, mutate_parent, seed_strategy
-from strategy_registry import list_strategies, record_experiment, upsert_strategy
+from strategy_registry import (
+    list_strategies,
+    record_experiment,
+    upsert_strategy,
+    record_evolution_run,
+)
 from validation import (
     default_evolution_window,
     build_walk_forward_folds,
@@ -67,33 +72,22 @@ def _pick_parent(symbol: str, timeframe: str) -> dict[str, Any] | None:
 
 
 def _insert_evolution_audit(child, parent, cycle_id, *, status, score=0.0, passed=False, metrics=None, notes=""):
-    conn = get_conn()
-    cur = conn.cursor()
-    cur.execute(
-        """
-        INSERT INTO evolution_runs (
-            cycle_id, symbol, timeframe,
-            parent_strategy_id, child_strategy_id,
-            status, score, passed,
-            parameters, metrics, notes, created_at
-        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s::jsonb, %s, NOW())
-        """,
-        (
-            cycle_id,
-            child.symbol,
-            child.timeframe,
-            parent.get("strategy_id") if parent else None,
-            child.strategy_id,
-            status,
-            score,
-            passed,
-            json.dumps(child.parameters, default=str),
-            json.dumps(metrics or {}, default=str),
-            notes,
-        ),
-    )
-    conn.commit()
-    conn.close()
+    try:
+        record_evolution_run(
+            cycle_id=cycle_id,
+            symbol=child.symbol,
+            timeframe=child.timeframe,
+            parent_strategy_id=parent.get("strategy_id") if parent else None,
+            child_strategy_id=child.strategy_id,
+            status=status,
+            score=score,
+            passed=passed,
+            parameters=child.parameters,
+            metrics=metrics or {},
+            notes=notes,
+        )
+    except Exception as e:
+        print(f"[WARN] evolution audit failed: {e}", flush=True)
 
 
 def _run_split(child, start, end, allow_shorts, max_bars, use_cache):
@@ -133,7 +127,11 @@ def evolve_once(
     family: str = "evo",
     seed: int | None = None,
 ) -> list[dict[str, Any]]:
-    init_db()
+    try:
+        init_db()
+    except Exception as e:
+        print(f"[WARN] DB init failed, using local mode: {e}", flush=True)
+
     cycle_id = f"{family}_{_now_iso().replace(':', '').replace('-', '')}"
 
     if not start or not end:
@@ -181,7 +179,6 @@ def evolve_once(
                     fold_start = fold.start
                     fold_end = fold.end
 
-                    # derive train/val/test splits inside fold
                     start_ts = datetime.fromisoformat(fold_start.replace("Z", "+00:00"))
                     end_ts = datetime.fromisoformat(fold_end.replace("Z", "+00:00"))
                     span = end_ts - start_ts
