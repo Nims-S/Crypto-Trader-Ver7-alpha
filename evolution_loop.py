@@ -1,31 +1,28 @@
 """Fully automated strategy evolution loop.
 
-This module is the glue between:
-- mutation_engine: generates bounded strategy variants
-- backtest: evaluates each child on historical data
-- evolution: scores results and decides promotion
-- strategy_registry: persists candidates, experiments, and audit rows
-
-It is intentionally conservative: only entry filters and a small state subset
-are mutated. Stop logic, exits, and sizing stay under the existing backtest and
-live execution rules.
+Now includes:
+- walk-forward validation (train / validation / test splits)
+- rolling folds for robustness
+- stability-aware scoring (reduces overfitting)
 """
 
 from __future__ import annotations
 
 import argparse
 import json
-import os
 import time
-from dataclasses import asdict
 from datetime import datetime
 from typing import Any
 
 from backtest import run_backtest
 from db import get_conn, init_db
-from evolution import promotion_status, score_metrics
 from mutation_engine import MutationSpec, mutate_parent, seed_strategy
-from strategy_registry import get_strategy, list_strategies, record_experiment, upsert_strategy
+from strategy_registry import list_strategies, record_experiment, upsert_strategy
+from validation import (
+    default_evolution_window,
+    build_walk_forward_folds,
+    summarize_walk_forward_reports,
+)
 
 DEFAULT_SYMBOLS = ["BTC/USDT", "ETH/USDT", "BNB/USDT", "LINK/USDT", "AVAX/USDT", "SOL/USDT"]
 DEFAULT_TIMEFRAMES = ["1d", "4h"]
@@ -33,13 +30,6 @@ DEFAULT_TIMEFRAMES = ["1d", "4h"]
 
 def _now_iso() -> str:
     return datetime.utcnow().isoformat(timespec="seconds") + "Z"
-
-
-def _safe_int(value: Any, default: int = 0) -> int:
-    try:
-        return int(value)
-    except Exception:
-        return default
 
 
 def _safe_float(value: Any, default: float = 0.0) -> float:
@@ -50,7 +40,6 @@ def _safe_float(value: Any, default: float = 0.0) -> float:
 
 
 def _pick_parent(symbol: str, timeframe: str) -> dict[str, Any] | None:
-    """Choose the strongest existing candidate for the symbol/timeframe pair."""
     strategies = list_strategies(active_only=True)
     symbol_key = symbol.strip().lower()
     tf_key = timeframe.strip().lower()
@@ -66,32 +55,18 @@ def _pick_parent(symbol: str, timeframe: str) -> dict[str, Any] | None:
 
     def _rank(row: dict[str, Any]):
         metrics = row.get("metrics") or {}
-        decision = metrics.get("decision") or {}
-        score = _safe_float(decision.get("score", 0.0))
+        wf = metrics.get("walk_forward") or {}
+        score = _safe_float(wf.get("score", 0.0))
         return (
             score,
             _safe_float(metrics.get("profit_factor", 0.0)),
             _safe_float(metrics.get("return_pct", 0.0)),
-            _safe_int(metrics.get("trades", 0)),
         )
 
     return sorted(candidates, key=_rank, reverse=True)[0]
 
 
-def _strategy_record_from_child(child: MutationSpec, parent: dict[str, Any] | None, cycle_id: str) -> dict[str, Any]:
-    parent_id = parent.get("strategy_id") if parent else None
-    return {
-        "cycle_id": cycle_id,
-        "parent_strategy_id": parent_id,
-        "child_strategy_id": child.strategy_id,
-        "symbol": child.symbol,
-        "timeframe": child.timeframe,
-        "parameters": child.parameters,
-        "tags": child.tags,
-    }
-
-
-def _insert_evolution_audit(child: MutationSpec, parent: dict[str, Any] | None, cycle_id: str, *, status: str, score: float = 0.0, passed: bool = False, metrics: dict[str, Any] | None = None, notes: str = "") -> None:
+def _insert_evolution_audit(child, parent, cycle_id, *, status, score=0.0, passed=False, metrics=None, notes=""):
     conn = get_conn()
     cur = conn.cursor()
     cur.execute(
@@ -121,8 +96,8 @@ def _insert_evolution_audit(child: MutationSpec, parent: dict[str, Any] | None, 
     conn.close()
 
 
-def _evaluate_child(child: MutationSpec, *, start: str | None, end: str | None, max_bars: int, allow_shorts: bool, use_cache: bool) -> dict[str, Any]:
-    parent_payload = {
+def _run_split(child, start, end, allow_shorts, max_bars, use_cache):
+    payload = {
         "strategy_id": child.base_strategy,
         "base_strategy": child.base_strategy,
         "version": child.version - 1,
@@ -136,7 +111,7 @@ def _evaluate_child(child: MutationSpec, *, start: str | None, end: str | None, 
         allow_shorts=allow_shorts or bool(child.parameters.get("allow_shorts", False)),
         max_bars=max_bars,
         use_cache=use_cache,
-        strategy_override=parent_payload,
+        strategy_override=payload,
     )
 
 
@@ -149,26 +124,42 @@ def evolve_once(
     allow_shorts: bool = False,
     start: str | None = None,
     end: str | None = None,
+    lookback_days: int = 720,
+    folds: int = 3,
+    train_ratio: float = 0.6,
+    val_ratio: float = 0.2,
+    test_ratio: float = 0.2,
     use_cache: bool = True,
     family: str = "evo",
     seed: int | None = None,
 ) -> list[dict[str, Any]]:
-    """Run one deterministic evolution cycle across the requested universe."""
     init_db()
     cycle_id = f"{family}_{_now_iso().replace(':', '').replace('-', '')}"
-    results: list[dict[str, Any]] = []
+
+    if not start or not end:
+        start, end = default_evolution_window(lookback_days)
+
+    results = []
 
     for symbol in symbols:
         for timeframe in timeframes:
             parent = _pick_parent(symbol, timeframe)
-            if parent is None:
-                seed_child = seed_strategy(symbol, timeframe, family=family)
-                children = [seed_child]
-            else:
-                children = mutate_parent(parent, symbol=symbol, timeframe=timeframe, n_children=children_per_parent, seed=seed)
+            children = (
+                [seed_strategy(symbol, timeframe, family=family)]
+                if parent is None
+                else mutate_parent(parent, symbol=symbol, timeframe=timeframe, n_children=children_per_parent, seed=seed)
+            )
+
+            wf_folds = build_walk_forward_folds(
+                start,
+                end,
+                folds=folds,
+                train_ratio=train_ratio,
+                val_ratio=val_ratio,
+                test_ratio=test_ratio,
+            )
 
             for child in children:
-                # Pre-register the candidate before evaluation so the run is auditable.
                 upsert_strategy(
                     child.strategy_id,
                     base_strategy=child.base_strategy,
@@ -181,24 +172,42 @@ def evolve_once(
                     notes=child.notes,
                     active=False,
                 )
-                _insert_evolution_audit(child, parent, cycle_id, status="running", notes="candidate scheduled")
 
-                result = _evaluate_child(
-                    child,
-                    start=start,
-                    end=end,
-                    max_bars=max_bars,
-                    allow_shorts=allow_shorts,
-                    use_cache=use_cache,
-                )
-                if "error" in result:
-                    _insert_evolution_audit(child, parent, cycle_id, status="error", metrics=result, notes=result["error"])
-                    results.append({"strategy_id": child.strategy_id, "status": "error", "error": result["error"]})
-                    continue
+                _insert_evolution_audit(child, parent, cycle_id, status="running", notes="walk-forward eval")
 
-                decision = score_metrics(result)
-                status = promotion_status(decision)
-                metrics = {**result, "decision": decision.as_dict()}
+                fold_reports = []
+
+                for fold in wf_folds:
+                    fold_start = fold.start
+                    fold_end = fold.end
+
+                    # derive train/val/test splits inside fold
+                    start_ts = datetime.fromisoformat(fold_start.replace("Z", "+00:00"))
+                    end_ts = datetime.fromisoformat(fold_end.replace("Z", "+00:00"))
+                    span = end_ts - start_ts
+
+                    train_end = start_ts + span * train_ratio
+                    val_end = train_end + span * val_ratio
+
+                    train = _run_split(child, fold_start, train_end.isoformat(), allow_shorts, max_bars, use_cache)
+                    val = _run_split(child, train_end.isoformat(), val_end.isoformat(), allow_shorts, max_bars, use_cache)
+                    test = _run_split(child, val_end.isoformat(), fold_end, allow_shorts, max_bars, use_cache)
+
+                    fold_reports.append({
+                        "label": fold.label,
+                        "train": train,
+                        "val": val,
+                        "test": test,
+                    })
+
+                summary = summarize_walk_forward_reports(fold_reports)
+
+                status = "validated" if summary["passed"] else "rejected"
+
+                metrics = {
+                    "walk_forward": summary,
+                    "folds": fold_reports,
+                }
 
                 upsert_strategy(
                     child.strategy_id,
@@ -210,72 +219,55 @@ def evolve_once(
                     tags=child.tags,
                     source=child.source,
                     notes=child.notes,
-                    active=decision.passed,
-                    validated_at=_now_iso() if decision.passed else None,
+                    active=summary["passed"],
+                    validated_at=_now_iso() if summary["passed"] else None,
                 )
+
                 record_experiment(
                     child.strategy_id,
                     symbol=child.symbol,
                     timeframe=child.timeframe,
-                    run_type="evolution_backtest",
+                    run_type="walkforward_backtest",
                     parameters=child.parameters,
                     metrics=metrics,
-                    passed=decision.passed,
+                    passed=summary["passed"],
                     notes=f"cycle_id={cycle_id}",
                 )
-                _insert_evolution_audit(child, parent, cycle_id, status=status, score=decision.score, passed=decision.passed, metrics=metrics, notes="promoted" if decision.passed else "rejected")
-                results.append(
-                    {
-                        "strategy_id": child.strategy_id,
-                        "parent_strategy_id": parent.get("strategy_id") if parent else None,
-                        "symbol": child.symbol,
-                        "timeframe": child.timeframe,
-                        "decision": decision.as_dict(),
-                        "result": result,
-                    }
+
+                _insert_evolution_audit(
+                    child,
+                    parent,
+                    cycle_id,
+                    status=status,
+                    score=summary["score"],
+                    passed=summary["passed"],
+                    metrics=metrics,
+                    notes="promoted" if summary["passed"] else "rejected",
                 )
+
+                results.append({
+                    "strategy_id": child.strategy_id,
+                    "symbol": child.symbol,
+                    "timeframe": child.timeframe,
+                    "walk_forward": summary,
+                })
 
     return results
 
 
-def continuous_evolution(
-    *,
-    symbols: list[str],
-    timeframes: list[str],
-    children_per_parent: int = 4,
-    max_bars: int = 0,
-    allow_shorts: bool = False,
-    start: str | None = None,
-    end: str | None = None,
-    use_cache: bool = True,
-    family: str = "evo",
-    seed: int | None = None,
-    sleep_seconds: int = 3600,
-    max_cycles: int | None = None,
-) -> None:
+def continuous_evolution(**kwargs):
     cycle = 0
     while True:
         cycle += 1
-        results = evolve_once(
-            symbols=symbols,
-            timeframes=timeframes,
-            children_per_parent=children_per_parent,
-            max_bars=max_bars,
-            allow_shorts=allow_shorts,
-            start=start,
-            end=end,
-            use_cache=use_cache,
-            family=family,
-            seed=seed,
-        )
+        results = evolve_once(**kwargs)
         print(json.dumps({"cycle": cycle, "results": results}, indent=2), flush=True)
-        if max_cycles is not None and cycle >= max_cycles:
+        if kwargs.get("max_cycles") and cycle >= kwargs["max_cycles"]:
             break
-        time.sleep(max(1, sleep_seconds))
+        time.sleep(max(1, kwargs.get("sleep_seconds", 3600)))
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Run the automated strategy evolution loop")
+    parser = argparse.ArgumentParser()
     parser.add_argument("--symbols", default=",".join(DEFAULT_SYMBOLS))
     parser.add_argument("--timeframes", default=",".join(DEFAULT_TIMEFRAMES))
     parser.add_argument("--children-per-parent", type=int, default=4)
@@ -283,6 +275,11 @@ if __name__ == "__main__":
     parser.add_argument("--allow-shorts", action="store_true")
     parser.add_argument("--start")
     parser.add_argument("--end")
+    parser.add_argument("--lookback-days", type=int, default=720)
+    parser.add_argument("--folds", type=int, default=3)
+    parser.add_argument("--train-ratio", type=float, default=0.6)
+    parser.add_argument("--val-ratio", type=float, default=0.2)
+    parser.add_argument("--test-ratio", type=float, default=0.2)
     parser.add_argument("--no-cache", action="store_true")
     parser.add_argument("--family", default="evo")
     parser.add_argument("--seed", type=int, default=None)
@@ -303,11 +300,16 @@ if __name__ == "__main__":
             allow_shorts=args.allow_shorts,
             start=args.start,
             end=args.end,
+            lookback_days=args.lookback_days,
+            folds=args.folds,
+            train_ratio=args.train_ratio,
+            val_ratio=args.val_ratio,
+            test_ratio=args.test_ratio,
             use_cache=not args.no_cache,
             family=args.family,
             seed=args.seed,
             sleep_seconds=args.sleep_seconds,
-            max_cycles=None if args.max_cycles <= 0 else args.max_cycles,
+            max_cycles=args.max_cycles,
         )
     else:
         results = evolve_once(
@@ -318,6 +320,11 @@ if __name__ == "__main__":
             allow_shorts=args.allow_shorts,
             start=args.start,
             end=args.end,
+            lookback_days=args.lookback_days,
+            folds=args.folds,
+            train_ratio=args.train_ratio,
+            val_ratio=args.val_ratio,
+            test_ratio=args.test_ratio,
             use_cache=not args.no_cache,
             family=args.family,
             seed=args.seed,
