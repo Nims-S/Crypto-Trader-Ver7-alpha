@@ -1,23 +1,35 @@
-"""Persistence helpers for strategy evolution.
+"""Persistence helpers for strategy evolution (extended).
 
-This file keeps the registry local and reliable for development. The public API
-matches the rest of the bot so the evolution loop, backtester, and live runtime
-can keep using the same calls.
+Adds:
+- logic_hash (dedupe + lineage)
+- regime_profile (trend / MR / breakout)
+- robustness_score (stability metric)
+- parent_strategy_id (lineage)
+- ranking helpers
 """
 
 from __future__ import annotations
 
 import json
 import os
+import hashlib
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, List
 
 _STORE_PATH = Path(os.getenv("STRATEGY_STORE_FILE", ".strategy_store.json"))
 
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def compute_logic_hash(parameters: dict[str, Any] | None) -> str:
+    try:
+        blob = json.dumps(parameters or {}, sort_keys=True)
+        return hashlib.sha256(blob.encode()).hexdigest()[:16]
+    except Exception:
+        return "unknown"
 
 
 def _load() -> dict[str, Any]:
@@ -68,6 +80,10 @@ def _row(strategy_id: str, row: dict[str, Any] | None) -> dict[str, Any]:
         "source": row.get("source", "manual"),
         "notes": row.get("notes", "") or "",
         "active": bool(row.get("active", False)),
+        "logic_hash": row.get("logic_hash"),
+        "regime_profile": row.get("regime_profile"),
+        "robustness_score": float(row.get("robustness_score", 0.0) or 0.0),
+        "parent_strategy_id": row.get("parent_strategy_id"),
         "created_at": row.get("created_at"),
         "updated_at": row.get("updated_at"),
         "validated_at": row.get("validated_at"),
@@ -87,9 +103,15 @@ def upsert_strategy(
     notes: str = "",
     active: bool = False,
     validated_at: datetime | str | None = None,
+    regime_profile: str | None = None,
+    robustness_score: float = 0.0,
+    parent_strategy_id: str | None = None,
 ) -> dict[str, Any]:
     store = _load()
     now = _now()
+
+    logic_hash = compute_logic_hash(parameters)
+
     row = {
         "base_strategy": base_strategy,
         "version": int(version or 1),
@@ -100,79 +122,53 @@ def upsert_strategy(
         "source": source,
         "notes": notes,
         "active": bool(active),
+        "logic_hash": logic_hash,
+        "regime_profile": regime_profile,
+        "robustness_score": float(robustness_score or 0.0),
+        "parent_strategy_id": parent_strategy_id,
         "created_at": store["registry"].get(strategy_id, {}).get("created_at", now),
         "updated_at": now,
         "validated_at": validated_at.isoformat() if hasattr(validated_at, "isoformat") else validated_at,
     }
+
     store["registry"][strategy_id] = row
     _save(store)
     return _row(strategy_id, row)
 
 
-def record_experiment(
-    strategy_id: str,
+def rank_strategies(
     *,
-    symbol: str,
-    timeframe: str,
-    run_type: str = "backtest",
-    parameters: dict[str, Any] | None = None,
-    metrics: dict[str, Any] | None = None,
-    passed: bool = False,
-    notes: str = "",
-) -> dict[str, Any]:
-    store = _load()
-    store["counters"]["experiment_id"] = int(store["counters"].get("experiment_id", 0)) + 1
-    row = {
-        "id": store["counters"]["experiment_id"],
-        "strategy_id": strategy_id,
-        "symbol": symbol,
-        "timeframe": timeframe,
-        "run_type": run_type,
-        "parameters": _jsonable(parameters or {}),
-        "metrics": _jsonable(metrics or {}),
-        "passed": bool(passed),
-        "notes": notes,
-        "created_at": _now(),
-    }
-    store["experiments"].append(row)
-    _save(store)
-    return row
+    symbol: str | None = None,
+    timeframe: str | None = None,
+    regime: str | None = None,
+    active_only: bool = True,
+    limit: int = 10,
+) -> List[dict[str, Any]]:
+    rows = list_strategies(active_only=active_only)
 
+    def _match(r):
+        tags = {str(t).lower() for t in (r.get("tags") or [])}
+        if symbol and symbol.lower() not in tags:
+            return False
+        if timeframe and timeframe.lower() not in tags:
+            return False
+        if regime and (r.get("regime_profile") or "") != regime:
+            return False
+        return True
 
-def record_evolution_run(
-    *,
-    cycle_id: str,
-    symbol: str,
-    timeframe: str,
-    parent_strategy_id: str | None,
-    child_strategy_id: str,
-    status: str,
-    score: float = 0.0,
-    passed: bool = False,
-    parameters: dict[str, Any] | None = None,
-    metrics: dict[str, Any] | None = None,
-    notes: str = "",
-) -> dict[str, Any]:
-    store = _load()
-    store["counters"]["evolution_id"] = int(store["counters"].get("evolution_id", 0)) + 1
-    row = {
-        "id": store["counters"]["evolution_id"],
-        "cycle_id": cycle_id,
-        "symbol": symbol,
-        "timeframe": timeframe,
-        "parent_strategy_id": parent_strategy_id,
-        "child_strategy_id": child_strategy_id,
-        "status": status,
-        "score": float(score),
-        "passed": bool(passed),
-        "parameters": _jsonable(parameters or {}),
-        "metrics": _jsonable(metrics or {}),
-        "notes": notes,
-        "created_at": _now(),
-    }
-    store["evolution_runs"].append(row)
-    _save(store)
-    return row
+    rows = [r for r in rows if _match(r)]
+
+    def _score(r):
+        m = r.get("metrics") or {}
+        decision = m.get("decision") or {}
+        return (
+            float(decision.get("score", 0.0)),
+            float(r.get("robustness_score", 0.0)),
+            r.get("updated_at") or "",
+        )
+
+    rows.sort(key=_score, reverse=True)
+    return rows[:limit]
 
 
 def list_strategies(active_only: bool = False) -> list[dict[str, Any]]:
