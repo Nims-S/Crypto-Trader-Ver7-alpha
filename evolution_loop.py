@@ -283,10 +283,14 @@ if __name__ == "__main__":
     parser.add_argument("--sleep-seconds", type=int, default=3600)
     parser.add_argument("--max-cycles", type=int, default=1)
     parser.add_argument("--continuous", action="store_true")
+    parser.add_argument("--log-evolution", action="store_true", help="Backward-compatible alias; evolution is always logged locally")
     args = parser.parse_args()
 
     symbols = [s.strip() for s in args.symbols.split(",") if s.strip()]
     timeframes = [t.strip() for t in args.timeframes.split(",") if t.strip()]
+
+    if args.log_evolution:
+        print("[INFO] --log-evolution is enabled by default in local registry mode", flush=True)
 
     if args.continuous:
         continuous_evolution(
