@@ -13,7 +13,7 @@ import json
 import time
 from datetime import datetime, timezone
 from typing import Any
-
+from diagnostics import build_candidate_diagnostics
 from backtest import run_backtest
 from db import init_db
 from mutation_engine import MutationSpec, mutate_parent, seed_strategy
@@ -247,7 +247,13 @@ def evolve_once(
                     "symbol": child.symbol,
                     "timeframe": child.timeframe,
                     "walk_forward": summary,
-                })
+                    "diagnostics": build_candidate_diagnostics({
+                    "strategy_id": child.strategy_id,
+                    "symbol": child.symbol,
+                    "timeframe": child.timeframe,
+                    "walk_forward": summary,
+                  }),
+                }))
 
     return results
 
