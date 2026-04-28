@@ -1,8 +1,4 @@
-"""Strategy scoring and promotion rules.
-
-This module keeps the heuristics for deciding whether a strategy experiment is
-worth promoting out of the backtest runner and live execution loop.
-"""
+"""Strategy scoring and promotion rules (enhanced)."""
 
 from __future__ import annotations
 
@@ -39,11 +35,6 @@ def score_metrics(
     min_win_rate: float = 0.45,
     max_drawdown_pct: float = -15.0,
 ) -> ScoreDecision:
-    """Return a normalized score plus a promotion decision.
-
-    The scoring intentionally rewards robustness more than raw return so the
-    evolution loop does not overfit into short bursts of lucky performance.
-    """
     trades = int(metrics.get("trades", 0) or 0)
     profit_factor = _safe_float(metrics.get("profit_factor", 0.0))
     win_rate = _safe_float(metrics.get("win_rate", 0.0))
@@ -62,13 +53,14 @@ def score_metrics(
     if drawdown <= max_drawdown_pct:
         reasons.append(f"dd<={max_drawdown_pct:.1f}")
 
-    # Soft score components: clipped so one outlier metric cannot dominate.
     pf_component = min(max((profit_factor - 1.0) / 1.5, 0.0), 1.0)
     wr_component = min(max((win_rate - 0.35) / 0.45, 0.0), 1.0)
     dd_component = min(max((abs(drawdown) - 5.0) / 20.0, 0.0), 1.0)
     ret_component = min(max(return_pct / 25.0, -1.0), 1.0)
     rr_component = min(max(avg_rr / 4.0, 0.0), 1.0)
     trade_component = min(max(trades / max(min_trades, 1), 0.0), 2.0) / 2.0
+
+    density_penalty = 1.0 - min(trades / 50.0, 1.0)
 
     score = (
         0.28 * pf_component
@@ -77,6 +69,7 @@ def score_metrics(
         + 0.12 * max(ret_component, 0.0)
         + 0.10 * rr_component
         + 0.10 * trade_component
+        - 0.10 * density_penalty
     )
 
     passed = len(reasons) == 0 and score >= 0.55
