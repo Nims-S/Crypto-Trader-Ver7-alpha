@@ -1,12 +1,33 @@
-import psycopg2
+from __future__ import annotations
+
+import os
+from typing import Any
+
 from config import DB_URL, SYMBOLS
+
+try:
+    import psycopg2  # type: ignore
+except Exception:
+    psycopg2 = None  # type: ignore
+
+
+def _local_only() -> bool:
+    return os.getenv("LOCAL_STORE_ONLY", "false").strip().lower() in {"1", "true", "yes", "on"}
 
 
 def get_conn():
+    if psycopg2 is None:
+        raise RuntimeError("psycopg2 is not installed. Set LOCAL_STORE_ONLY=1 for offline evolution runs.")
+    if not DB_URL:
+        raise RuntimeError("DATABASE_URL is not configured")
     return psycopg2.connect(DB_URL, sslmode="require", connect_timeout=10)
 
 
 def init_db():
+    if psycopg2 is None or _local_only() or not DB_URL:
+        print("[WARN] DB init skipped (local mode or psycopg2 unavailable)", flush=True)
+        return
+
     conn = get_conn()
     cur = conn.cursor()
 
@@ -86,110 +107,6 @@ def init_db():
 
     for scope in ["GLOBAL"] + list(SYMBOLS):
         cur.execute("INSERT INTO trade_controls (scope, enabled, flatten_on_disable) VALUES (%s, TRUE, FALSE) ON CONFLICT (scope) DO NOTHING", (scope,))
-
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS strategy_controls (
-            strategy TEXT PRIMARY KEY,
-            paused_until TIMESTAMP,
-            pause_reason TEXT DEFAULT '',
-            updated_at TIMESTAMP NOT NULL DEFAULT NOW()
-        )
-    """)
-
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS symbol_controls (
-            symbol TEXT PRIMARY KEY,
-            cooldown_until TIMESTAMP,
-            cooldown_reason TEXT DEFAULT '',
-            updated_at TIMESTAMP NOT NULL DEFAULT NOW()
-        )
-    """)
-
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS strategy_stats (
-            strategy TEXT,
-            regime TEXT,
-            trades INTEGER DEFAULT 0,
-            wins INTEGER DEFAULT 0,
-            total_pnl FLOAT DEFAULT 0,
-            last_updated TIMESTAMP DEFAULT NOW(),
-            PRIMARY KEY (strategy, regime)
-        )
-    """)
-
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS strategy_registry (
-            strategy_id TEXT PRIMARY KEY,
-            base_strategy TEXT NOT NULL DEFAULT 'unknown',
-            version INTEGER NOT NULL DEFAULT 1,
-            status TEXT NOT NULL DEFAULT 'candidate',
-            parameters JSONB NOT NULL DEFAULT '{}'::jsonb,
-            metrics JSONB NOT NULL DEFAULT '{}'::jsonb,
-            tags JSONB NOT NULL DEFAULT '[]'::jsonb,
-            source TEXT NOT NULL DEFAULT 'manual',
-            notes TEXT NOT NULL DEFAULT '',
-            active BOOLEAN NOT NULL DEFAULT FALSE,
-            validated_at TIMESTAMP,
-            created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-            updated_at TIMESTAMP NOT NULL DEFAULT NOW()
-        )
-    """)
-
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS strategy_experiments (
-            id BIGSERIAL PRIMARY KEY,
-            strategy_id TEXT NOT NULL,
-            symbol TEXT NOT NULL,
-            timeframe TEXT NOT NULL,
-            run_type TEXT NOT NULL DEFAULT 'backtest',
-            parameters JSONB NOT NULL DEFAULT '{}'::jsonb,
-            metrics JSONB NOT NULL DEFAULT '{}'::jsonb,
-            passed BOOLEAN NOT NULL DEFAULT FALSE,
-            notes TEXT NOT NULL DEFAULT '',
-            created_at TIMESTAMP NOT NULL DEFAULT NOW()
-        )
-    """)
-
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS evolution_runs (
-            id BIGSERIAL PRIMARY KEY,
-            cycle_id TEXT NOT NULL,
-            symbol TEXT NOT NULL,
-            timeframe TEXT NOT NULL,
-            parent_strategy_id TEXT,
-            child_strategy_id TEXT NOT NULL,
-            status TEXT NOT NULL DEFAULT 'created',
-            score FLOAT DEFAULT 0,
-            passed BOOLEAN DEFAULT FALSE,
-            parameters JSONB NOT NULL DEFAULT '{}'::jsonb,
-            metrics JSONB NOT NULL DEFAULT '{}'::jsonb,
-            notes TEXT NOT NULL DEFAULT '',
-            created_at TIMESTAMP NOT NULL DEFAULT NOW()
-        )
-    """)
-
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_strategy_experiments_strategy_id ON strategy_experiments(strategy_id, created_at DESC)")
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_strategy_experiments_created_at ON strategy_experiments(created_at DESC)")
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_strategy_registry_active ON strategy_registry(active, updated_at DESC)")
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_evolution_runs_cycle_id ON evolution_runs(cycle_id, created_at DESC)")
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_evolution_runs_child_id ON evolution_runs(child_strategy_id, created_at DESC)")
-
-    safe_migrations = [
-        ("positions", "opened_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"),
-        ("positions", "updated_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"),
-        ("positions", "strategy_id_used", "TEXT"),
-        ("positions", "strategy_score", "FLOAT DEFAULT 0"),
-        ("positions", "was_override_used", "BOOLEAN DEFAULT FALSE"),
-        ("trades", "strategy_id_used", "TEXT"),
-        ("trades", "strategy_score", "FLOAT DEFAULT 0"),
-        ("trades", "was_override_used", "BOOLEAN DEFAULT FALSE"),
-        ("strategy_registry", "validated_at", "TIMESTAMP"),
-        ("strategy_registry", "created_at", "TIMESTAMP NOT NULL DEFAULT NOW()"),
-        ("strategy_registry", "updated_at", "TIMESTAMP NOT NULL DEFAULT NOW()"),
-        ("evolution_runs", "created_at", "TIMESTAMP NOT NULL DEFAULT NOW()"),
-    ]
-    for table, col, col_type in safe_migrations:
-        cur.execute(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {col} {col_type}")
 
     conn.commit()
     conn.close()
