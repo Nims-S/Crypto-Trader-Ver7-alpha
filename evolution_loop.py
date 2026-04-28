@@ -252,8 +252,8 @@ def evolve_once(
                     "symbol": child.symbol,
                     "timeframe": child.timeframe,
                     "walk_forward": summary,
-                  }),
-                }))
+                    }),
+                })
 
     return results
 
