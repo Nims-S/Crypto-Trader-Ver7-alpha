@@ -8,6 +8,7 @@ from typing import Any
 from datetime import datetime
 from math import isfinite
 import random
+import time
 
 from strategy_registry import upsert_strategy, list_strategies
 
@@ -96,7 +97,6 @@ def promotion_status(decision: ScoreDecision) -> str:
 
 
 def walk_forward_validate(symbol: str, timeframe: str, strategy_override: dict | None = None, folds: int = 2):
-    # Lazy import breaks the circular dependency with backtest.py.
     from backtest import fetch_ohlcv_full, run_backtest
 
     df = fetch_ohlcv_full(symbol, timeframe)
@@ -157,8 +157,31 @@ def mutate_parameters(base: dict) -> dict:
     return params
 
 
+def _rank(row: dict) -> float:
+    m = row.get("metrics") or {}
+    wf = m.get("walk_forward") or {}
+    return float(wf.get("score", m.get("wf_score", 0.0)))
+
+
 def evolve_once(symbol: str, timeframe: str, top_k: int = 3):
-    parents = list_strategies(active_only=True)[:top_k]
+    # 🔥 key fix: use ALL strategies, not just active
+    all_strats = list_strategies(active_only=False)
+
+    # filter by symbol/timeframe tags
+    filtered = []
+    for s in all_strats:
+        tags = {str(t).lower() for t in (s.get("tags") or [])}
+        if symbol.lower() in tags and timeframe.lower() in tags:
+            filtered.append(s)
+
+    # fallback if tagging missing
+    if not filtered:
+        filtered = all_strats
+
+    # pick best by score
+    filtered.sort(key=_rank, reverse=True)
+    parents = filtered[:top_k]
+
     results = []
 
     for p in parents:
@@ -167,17 +190,21 @@ def evolve_once(symbol: str, timeframe: str, top_k: int = 3):
         for _ in range(2):
             child_params = mutate_parameters(base_params)
             wf = walk_forward_validate(symbol, timeframe, {"parameters": child_params})
-            strategy_id = f"{symbol.replace('/', '_')}_{timeframe}_{datetime.utcnow().timestamp()}"
+
+            strategy_id = f"{symbol.replace('/', '_')}_{timeframe}_{int(time.time()*1000)}_{random.randint(1000,9999)}"
 
             upsert_strategy(
                 strategy_id,
                 base_strategy=p.get("strategy_id"),
                 parameters=child_params,
-                metrics={"wf_score": wf.get("score")},
+                metrics={"wf_score": wf.get("score"), "wf": wf},
                 status="active" if wf.get("passed") else "candidate",
                 active=wf.get("passed"),
                 robustness_score=wf.get("robustness", 0.0),
                 regime_profile="auto",
+                parent_strategy_id=p.get("strategy_id"),
+                tags=(p.get("tags") or []) + [symbol, timeframe, "evo"],
+                source="evolution",
             )
 
             results.append({
