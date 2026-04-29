@@ -277,7 +277,13 @@ def select_promotion_candidates(
         updated = row.get("updated_at") or row.get("created_at") or ""
         return (score, robustness, updated)
 
-    winners = [r for r in selected if "promotion_payload" in r]
+    if policy.require_validated:
+        # STRICT MODE → only eligible
+        winners = [r for r in selected if "promotion_payload" in r]
+    else:
+        # RESEARCH MODE → include ALL, even rejected
+        winners = selected
+
     winners.sort(key=_rank, reverse=True)
     return winners[: max(1, int(limit))]
 
