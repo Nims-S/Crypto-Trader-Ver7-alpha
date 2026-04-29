@@ -1,16 +1,17 @@
-"""Strategy scoring and promotion rules (enhanced)."""
+"""Strategy scoring, validation, and evolution rules."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from statistics import mean, pstdev
-from typing import Any
 from datetime import datetime
 from math import isfinite
+from statistics import mean, pstdev
+from typing import Any
 import random
 import time
 
-from strategy_registry import upsert_strategy, list_strategies
+from backtest import fetch_ohlcv_full
+from strategy_registry import compute_logic_hash, list_strategies, upsert_strategy
 
 
 @dataclass(frozen=True)
@@ -97,7 +98,7 @@ def promotion_status(decision: ScoreDecision) -> str:
 
 
 def walk_forward_validate(symbol: str, timeframe: str, strategy_override: dict | None = None, folds: int = 2):
-    from backtest import fetch_ohlcv_full, run_backtest
+    from backtest import run_backtest
 
     df = fetch_ohlcv_full(symbol, timeframe)
     if df is None or df.empty or len(df) < 300:
@@ -105,7 +106,6 @@ def walk_forward_validate(symbol: str, timeframe: str, strategy_override: dict |
 
     n = len(df)
     segment = max(120, n // (folds + 2))
-
     scores = []
 
     for f in range(folds):
@@ -117,7 +117,6 @@ def walk_forward_validate(symbol: str, timeframe: str, strategy_override: dict |
             break
 
         idx = df.index
-
         train = run_backtest(symbol, timeframe, start=str(idx[0]), end=str(idx[train_end]), strategy_override=strategy_override)
         val = run_backtest(symbol, timeframe, start=str(idx[train_end]), end=str(idx[val_end]), strategy_override=strategy_override)
         test = run_backtest(symbol, timeframe, start=str(idx[val_end]), end=str(idx[test_end]), strategy_override=strategy_override)
@@ -125,7 +124,6 @@ def walk_forward_validate(symbol: str, timeframe: str, strategy_override: dict |
         s_train = score_metrics(train).score
         s_val = score_metrics(val).score
         s_test = score_metrics(test).score
-
         scores.append((s_train + s_val + s_test) / 3.0)
 
     if not scores:
@@ -146,71 +144,213 @@ def walk_forward_validate(symbol: str, timeframe: str, strategy_override: dict |
 # ------------------ EVOLUTION LOOP ------------------
 
 
-def mutate_parameters(base: dict) -> dict:
+def _normalize_tags(tags: Any) -> set[str]:
+    if not tags:
+        return set()
+    if isinstance(tags, str):
+        return {tags.strip().lower()}
+    return {str(t).strip().lower() for t in tags if str(t).strip()}
+
+
+def _strategy_regime(row: dict[str, Any]) -> str:
+    regime = str(row.get("regime_profile") or "").strip().lower()
+    if regime in {"trend", "mean_reversion", "breakout"}:
+        return regime
+
+    params = row.get("parameters") or {}
+    mode = str(params.get("entry_mode", "") or "").strip().lower()
+    if mode in {"trend", "trend_following"}:
+        return "trend"
+    if mode in {"breakout"}:
+        return "breakout"
+    return "mean_reversion"
+
+
+def _regime_template(regime: str) -> dict[str, Any]:
+    if regime == "trend":
+        return {
+            "entry_mode": "trend",
+            "use_trend_filter": True,
+            "use_htf_filter": True,
+            "use_reclaim_filter": True,
+            "use_structure_filter": True,
+            "use_volume_filter": True,
+            "use_breakout_filter": False,
+            "min_adx_shift": 5,
+            "min_atr_rank_shift": 0.08,
+            "min_bb_rank_shift": 0.05,
+            "rsi_long_shift": 4,
+            "rsi_short_shift": -2,
+            "allow_shorts": False,
+        }
+    if regime == "breakout":
+        return {
+            "entry_mode": "breakout",
+            "use_trend_filter": True,
+            "use_htf_filter": True,
+            "use_reclaim_filter": True,
+            "use_structure_filter": True,
+            "use_volume_filter": True,
+            "use_breakout_filter": True,
+            "min_adx_shift": 3,
+            "min_atr_rank_shift": 0.05,
+            "min_bb_rank_shift": 0.06,
+            "rsi_long_shift": 2,
+            "rsi_short_shift": -2,
+            "allow_shorts": False,
+        }
+    return {
+        "entry_mode": "mean_reversion",
+        "use_trend_filter": True,
+        "use_htf_filter": True,
+        "use_reclaim_filter": True,
+        "use_structure_filter": True,
+        "use_volume_filter": True,
+        "use_breakout_filter": False,
+        "min_adx_shift": -4,
+        "min_atr_rank_shift": -0.05,
+        "min_bb_rank_shift": -0.05,
+        "rsi_long_shift": -4,
+        "rsi_short_shift": 4,
+        "allow_shorts": False,
+    }
+
+
+def _apply_regime_template(base: dict[str, Any], template: dict[str, Any]) -> dict[str, Any]:
     params = dict(base or {})
-
-    params["min_adx"] = max(10, params.get("min_adx", 20) + random.choice([-5, 0, 5]))
-    params["min_atr_rank"] = max(0.2, params.get("min_atr_rank", 0.6) + random.choice([-0.1, 0, 0.1]))
-    params["min_bb_rank"] = max(0.2, params.get("min_bb_rank", 0.6) + random.choice([-0.1, 0, 0.1]))
-    params["rsi_long"] = min(70, max(40, params.get("rsi_long", 55) + random.choice([-5, 0, 5])))
-
+    params["entry_mode"] = template.get("entry_mode", params.get("entry_mode", "mean_reversion"))
+    params["use_trend_filter"] = bool(template.get("use_trend_filter", params.get("use_trend_filter", True)))
+    params["use_htf_filter"] = bool(template.get("use_htf_filter", params.get("use_htf_filter", True)))
+    params["use_reclaim_filter"] = bool(template.get("use_reclaim_filter", params.get("use_reclaim_filter", True)))
+    params["use_structure_filter"] = bool(template.get("use_structure_filter", params.get("use_structure_filter", True)))
+    params["use_volume_filter"] = bool(template.get("use_volume_filter", params.get("use_volume_filter", True)))
+    params["use_breakout_filter"] = bool(template.get("use_breakout_filter", params.get("use_breakout_filter", False)))
+    params["allow_shorts"] = bool(template.get("allow_shorts", params.get("allow_shorts", False)))
+    params["min_adx"] = max(8.0, _safe_float(params.get("min_adx", 16.0)) + _safe_float(template.get("min_adx_shift", 0.0)))
+    params["min_atr_rank"] = _clamp(_safe_float(params.get("min_atr_rank", 0.15)) + _safe_float(template.get("min_atr_rank_shift", 0.0)), 0.05, 0.95)
+    params["min_bb_rank"] = _clamp(_safe_float(params.get("min_bb_rank", 0.15)) + _safe_float(template.get("min_bb_rank_shift", 0.0)), 0.05, 0.95)
+    params["rsi_long"] = _clamp(_safe_float(params.get("rsi_long", 53.0)) + _safe_float(template.get("rsi_long_shift", 0.0)), 35.0, 70.0)
+    params["rsi_short"] = _clamp(_safe_float(params.get("rsi_short", 47.0)) + _safe_float(template.get("rsi_short_shift", 0.0)), 30.0, 65.0)
     return params
 
 
-def _rank(row: dict) -> float:
+def _explore_noise(base: dict[str, Any]) -> dict[str, Any]:
+    params = dict(base or {})
+    params["min_adx"] = _clamp(_safe_float(params.get("min_adx", 16.0)) + random.choice([-5, -2, 0, 2, 5]), 8.0, 40.0)
+    params["min_atr_rank"] = _clamp(_safe_float(params.get("min_atr_rank", 0.15)) + random.choice([-0.12, -0.05, 0.0, 0.05, 0.12]), 0.05, 0.95)
+    params["min_bb_rank"] = _clamp(_safe_float(params.get("min_bb_rank", 0.15)) + random.choice([-0.12, -0.05, 0.0, 0.05, 0.12]), 0.05, 0.95)
+    params["rsi_long"] = _clamp(_safe_float(params.get("rsi_long", 53.0)) + random.choice([-8, -4, 0, 4, 8]), 35.0, 70.0)
+    params["rsi_short"] = _clamp(_safe_float(params.get("rsi_short", 47.0)) + random.choice([-8, -4, 0, 4, 8]), 30.0, 65.0)
+    params["use_breakout_filter"] = bool(random.choice([params.get("use_breakout_filter", False), True, False]))
+    return params
+
+
+def _rank(row: dict[str, Any]) -> float:
     m = row.get("metrics") or {}
     wf = m.get("walk_forward") or {}
-    return float(wf.get("score", m.get("wf_score", 0.0)))
+    decision = m.get("decision") or {}
+    robustness = _safe_float(row.get("robustness_score", 0.0))
+    return max(
+        _safe_float(wf.get("score", m.get("wf_score", 0.0))),
+        _safe_float(decision.get("score", 0.0)),
+    ) + 0.25 * robustness
+
+
+def _candidate_pool(all_strats: list[dict[str, Any]], symbol: str, timeframe: str) -> list[dict[str, Any]]:
+    symbol_key = symbol.strip().lower()
+    tf_key = timeframe.strip().lower()
+
+    tagged = []
+    for s in all_strats:
+        tags = _normalize_tags(s.get("tags"))
+        if symbol_key in tags and tf_key in tags:
+            tagged.append(s)
+
+    pool = tagged if tagged else list(all_strats)
+    pool.sort(key=_rank, reverse=True)
+
+    # Keep the highest-ranked strategy from each regime so the loop explores more than one shape.
+    diversified: list[dict[str, Any]] = []
+    seen_regimes: set[str] = set()
+    for row in pool:
+        regime = _strategy_regime(row)
+        if regime not in seen_regimes:
+            diversified.append(row)
+            seen_regimes.add(regime)
+        if len(diversified) >= max(3, 5):
+            break
+
+    # Top ranked leftovers to keep exploitation in the loop.
+    for row in pool:
+        if row not in diversified:
+            diversified.append(row)
+        if len(diversified) >= max(5, 2 * max(1, 3)):
+            break
+
+    return diversified[: max(3, top_k if (top_k := 3) else 3)]
 
 
 def evolve_once(symbol: str, timeframe: str, top_k: int = 3):
-    # 🔥 key fix: use ALL strategies, not just active
     all_strats = list_strategies(active_only=False)
-
-    # filter by symbol/timeframe tags
-    filtered = []
-    for s in all_strats:
-        tags = {str(t).lower() for t in (s.get("tags") or [])}
-        if symbol.lower() in tags and timeframe.lower() in tags:
-            filtered.append(s)
-
-    # fallback if tagging missing
-    if not filtered:
-        filtered = all_strats
-
-    # pick best by score
-    filtered.sort(key=_rank, reverse=True)
-    parents = filtered[:top_k]
+    parents = _candidate_pool(all_strats, symbol, timeframe)[: max(1, top_k)]
 
     results = []
+    seen_logic_hashes: set[str] = set()
 
     for p in parents:
-        base_params = p.get("parameters") or {}
+        base_params = dict(p.get("parameters") or {})
+        parent_regime = _strategy_regime(p)
 
-        for _ in range(2):
-            child_params = mutate_parameters(base_params)
+        mutation_specs = [
+            (parent_regime, "exploit"),
+            ("trend" if parent_regime != "trend" else "mean_reversion", "cross_regime"),
+            ("breakout" if parent_regime != "breakout" else "trend", "structural"),
+        ]
+
+        for target_regime, label in mutation_specs:
+            if label == "exploit":
+                child_params = _apply_regime_template(base_params, _regime_template(target_regime))
+            elif label == "cross_regime":
+                child_params = _apply_regime_template(base_params, _regime_template(target_regime))
+                child_params = _explore_noise(child_params)
+            else:
+                child_params = _apply_regime_template(base_params, _regime_template(target_regime))
+                child_params["use_breakout_filter"] = True if target_regime == "breakout" else child_params.get("use_breakout_filter", False)
+                child_params["use_volume_filter"] = True
+                child_params = _explore_noise(child_params)
+
+            logic_hash = compute_logic_hash(child_params)
+            if logic_hash in seen_logic_hashes:
+                continue
+            seen_logic_hashes.add(logic_hash)
+
             wf = walk_forward_validate(symbol, timeframe, {"parameters": child_params})
-
-            strategy_id = f"{symbol.replace('/', '_')}_{timeframe}_{int(time.time()*1000)}_{random.randint(1000,9999)}"
+            strategy_id = f"{symbol.replace('/', '_')}_{timeframe}_{int(time.time() * 1000)}_{random.randint(1000, 9999)}"
 
             upsert_strategy(
                 strategy_id,
                 base_strategy=p.get("strategy_id"),
                 parameters=child_params,
-                metrics={"wf_score": wf.get("score"), "wf": wf},
+                metrics={"wf_score": wf.get("score"), "wf": wf, "parent_score": _rank(p)},
                 status="active" if wf.get("passed") else "candidate",
                 active=wf.get("passed"),
-                robustness_score=wf.get("robustness", 0.0),
-                regime_profile="auto",
+                robustness_score=_safe_float(wf.get("robustness", 0.0)),
+                regime_profile=target_regime,
                 parent_strategy_id=p.get("strategy_id"),
-                tags=(p.get("tags") or []) + [symbol, timeframe, "evo"],
+                tags=list(dict.fromkeys(list(p.get("tags") or []) + [symbol, timeframe, "evo", target_regime, label])),
                 source="evolution",
             )
 
-            results.append({
-                "parent": p.get("strategy_id"),
-                "child": strategy_id,
-                "wf": wf,
-            })
+            results.append(
+                {
+                    "parent": p.get("strategy_id"),
+                    "parent_regime": parent_regime,
+                    "child": strategy_id,
+                    "child_regime": target_regime,
+                    "mutation": label,
+                    "logic_hash": logic_hash,
+                    "wf": wf,
+                }
+            )
 
     return results
