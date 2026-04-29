@@ -11,9 +11,9 @@ from __future__ import annotations
 import argparse
 import json
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
-
+from diagnostics import build_candidate_diagnostics
 from backtest import run_backtest
 from db import init_db
 from mutation_engine import MutationSpec, mutate_parent, seed_strategy
@@ -34,7 +34,7 @@ DEFAULT_TIMEFRAMES = ["1d", "4h"]
 
 
 def _now_iso() -> str:
-    return datetime.utcnow().isoformat(timespec="seconds") + "Z"
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
 def _safe_float(value: Any, default: float = 0.0) -> float:
@@ -197,7 +197,7 @@ def evolve_once(
                         "test": test,
                     })
 
-                summary = summarize_walk_forward_reports(fold_reports)
+                summary = summarize_walk_forward_reports(fold_reports, timeframe=timeframe)
 
                 status = "validated" if summary["passed"] else "rejected"
 
@@ -247,6 +247,12 @@ def evolve_once(
                     "symbol": child.symbol,
                     "timeframe": child.timeframe,
                     "walk_forward": summary,
+                    "diagnostics": build_candidate_diagnostics({
+                    "strategy_id": child.strategy_id,
+                    "symbol": child.symbol,
+                    "timeframe": child.timeframe,
+                    "walk_forward": summary,
+                    }),
                 })
 
     return results
@@ -283,10 +289,14 @@ if __name__ == "__main__":
     parser.add_argument("--sleep-seconds", type=int, default=3600)
     parser.add_argument("--max-cycles", type=int, default=1)
     parser.add_argument("--continuous", action="store_true")
+    parser.add_argument("--log-evolution", action="store_true", help="Backward-compatible alias; evolution is always logged locally")
     args = parser.parse_args()
 
     symbols = [s.strip() for s in args.symbols.split(",") if s.strip()]
     timeframes = [t.strip() for t in args.timeframes.split(",") if t.strip()]
+
+    if args.log_evolution:
+        print("[INFO] --log-evolution is enabled by default in local registry mode", flush=True)
 
     if args.continuous:
         continuous_evolution(

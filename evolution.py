@@ -33,16 +33,22 @@ def _safe_float(value: Any, default: float = 0.0) -> float:
         return default
 
 
+def _clamp(value: float, low: float, high: float) -> float:
+    return max(low, min(high, value))
+
+
 def score_metrics(
     metrics: dict[str, Any],
     *,
-    min_trades: int = 20,
+    min_trades: int = 5,
     min_profit_factor: float = 1.10,
     min_win_rate: float = 0.45,
     max_drawdown_pct: float = -15.0,
 ) -> ScoreDecision:
     trades = int(metrics.get("trades", 0) or 0)
-    profit_factor = _safe_float(metrics.get("profit_factor", 0.0))
+    raw_profit_factor = _safe_float(metrics.get("profit_factor", 0.0))
+    profit_factor = raw_profit_factor if isfinite(raw_profit_factor) else 0.0
+    profit_factor = _clamp(profit_factor, 0.0, 20.0)
     win_rate = _safe_float(metrics.get("win_rate", 0.0))
     drawdown = _safe_float(metrics.get("max_drawdown_pct", 0.0))
     return_pct = _safe_float(metrics.get("return_pct", 0.0))
@@ -64,7 +70,7 @@ def score_metrics(
     dd_component = min(max((abs(drawdown) - 5.0) / 20.0, 0.0), 1.0)
     ret_component = min(max(return_pct / 25.0, -1.0), 1.0)
     rr_component = min(max(avg_rr / 4.0, 0.0), 1.0)
-    trade_component = min(max(trades / max(min_trades, 1), 0.0), 2.0) / 2.0
+    trade_component = min(max(trades / float(max(min_trades, 1)), 0.0), 2.0) / 2.0
 
     density_penalty = 1.0 - min(trades / 50.0, 1.0)
 
