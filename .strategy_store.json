@@ -16032,6 +16032,3354 @@
       "validated_at": null,
       "version": 1
     },
+    "BTC_USDT_4h_1777454726471_3638": {
+      "active": false,
+      "base_strategy": "evo_btc_usdt_4h_5413f4f8",
+      "created_at": "2026-04-29T09:25:26.478566+00:00",
+      "logic_hash": "5c3dbd1e0edede46",
+      "metrics": {
+        "parent_score": 0.180149,
+        "wf": {
+          "diagnostics": {
+            "bottlenecks": [
+              [
+                "sparse_signals",
+                3
+              ]
+            ],
+            "mean_trade_density": 1.0667,
+            "zero_trade_folds": 0
+          },
+          "folds": [
+            {
+              "test": {
+                "diagnostics": {
+                  "bars_seen": 250,
+                  "bottleneck": "sparse_signals",
+                  "drawdown": -1.0139,
+                  "pf": 0.0,
+                  "return_pct": -1.0139,
+                  "stage": "test",
+                  "trade_density_per_100_bars": 0.8,
+                  "trades": 2,
+                  "win_rate": 0.0
+                },
+                "metrics": {
+                  "avg_rr_realised": 0.0,
+                  "final_equity": 9898.61,
+                  "htf_timeframe": "1d",
+                  "ltf_timeframe": "4h",
+                  "max_drawdown_pct": -1.0139,
+                  "profit_factor": 0.0,
+                  "return_pct": -1.0139,
+                  "symbol": "BTC/USDT",
+                  "trades": 2,
+                  "win_rate": 0.0
+                }
+              },
+              "train": {
+                "diagnostics": {
+                  "bars_seen": 250,
+                  "bottleneck": "sparse_signals",
+                  "drawdown": -1.2422,
+                  "pf": 0.5975,
+                  "return_pct": -0.4435,
+                  "stage": "train",
+                  "trade_density_per_100_bars": 1.6,
+                  "trades": 4,
+                  "win_rate": 0.5
+                },
+                "metrics": {
+                  "avg_rr_realised": 0.597,
+                  "final_equity": 9955.65,
+                  "htf_timeframe": "1d",
+                  "ltf_timeframe": "4h",
+                  "max_drawdown_pct": -1.2422,
+                  "profit_factor": 0.5975,
+                  "return_pct": -0.4435,
+                  "symbol": "BTC/USDT",
+                  "trades": 4,
+                  "win_rate": 0.5
+                }
+              },
+              "val": {
+                "diagnostics": {
+                  "bars_seen": 250,
+                  "bottleneck": "sparse_signals",
+                  "drawdown": -1.0139,
+                  "pf": 0.0,
+                  "return_pct": -1.0139,
+                  "stage": "val",
+                  "trade_density_per_100_bars": 0.8,
+                  "trades": 2,
+                  "win_rate": 0.0
+                },
+                "metrics": {
+                  "avg_rr_realised": 0.0,
+                  "final_equity": 9898.61,
+                  "htf_timeframe": "1d",
+                  "ltf_timeframe": "4h",
+                  "max_drawdown_pct": -1.0139,
+                  "profit_factor": 0.0,
+                  "return_pct": -1.0139,
+                  "symbol": "BTC/USDT",
+                  "trades": 2,
+                  "win_rate": 0.0
+                }
+              }
+            }
+          ],
+          "passed": false,
+          "robustness": 0.12141944444444445,
+          "score": 0.12141944444444445,
+          "spread": 0.0
+        },
+        "wf_score": 0.12141944444444445
+      },
+      "notes": "",
+      "parameters": {
+        "allow_shorts": false,
+        "entry_mode": "mean_reversion",
+        "min_adx": 12.0,
+        "min_atr_rank": 0.09999999999999999,
+        "min_bb_rank": 0.09999999999999999,
+        "rsi_long": 49.0,
+        "rsi_short": 51.0,
+        "use_breakout_filter": false,
+        "use_htf_filter": true,
+        "use_reclaim_filter": true,
+        "use_structure_filter": true,
+        "use_trend_filter": true,
+        "use_volume_filter": true
+      },
+      "parent_strategy_id": "evo_btc_usdt_4h_5413f4f8",
+      "regime_profile": "mean_reversion",
+      "robustness_score": 0.12141944444444445,
+      "source": "evolution",
+      "status": "candidate",
+      "tags": [
+        "btc/usdt",
+        "4h",
+        "evo",
+        "seed",
+        "mean_reversion",
+        "BTC/USDT",
+        "exploit"
+      ],
+      "updated_at": "2026-04-29T09:25:26.478566+00:00",
+      "validated_at": null,
+      "version": 1
+    },
+    "BTC_USDT_4h_1777454728337_4542": {
+      "active": false,
+      "base_strategy": "evo_btc_usdt_4h_5413f4f8",
+      "created_at": "2026-04-29T09:25:28.354974+00:00",
+      "logic_hash": "3e2ab4f02c7af75c",
+      "metrics": {
+        "parent_score": 0.180149,
+        "wf": {
+          "diagnostics": {
+            "bottlenecks": [
+              [
+                "sparse_signals",
+                3
+              ]
+            ],
+            "mean_trade_density": 1.0667,
+            "zero_trade_folds": 0
+          },
+          "folds": [
+            {
+              "test": {
+                "diagnostics": {
+                  "bars_seen": 250,
+                  "bottleneck": "sparse_signals",
+                  "drawdown": -1.0139,
+                  "pf": 0.0,
+                  "return_pct": -1.0139,
+                  "stage": "test",
+                  "trade_density_per_100_bars": 0.8,
+                  "trades": 2,
+                  "win_rate": 0.0
+                },
+                "metrics": {
+                  "avg_rr_realised": 0.0,
+                  "final_equity": 9898.61,
+                  "htf_timeframe": "1d",
+                  "ltf_timeframe": "4h",
+                  "max_drawdown_pct": -1.0139,
+                  "profit_factor": 0.0,
+                  "return_pct": -1.0139,
+                  "symbol": "BTC/USDT",
+                  "trades": 2,
+                  "win_rate": 0.0
+                }
+              },
+              "train": {
+                "diagnostics": {
+                  "bars_seen": 250,
+                  "bottleneck": "sparse_signals",
+                  "drawdown": -1.2422,
+                  "pf": 0.5975,
+                  "return_pct": -0.4435,
+                  "stage": "train",
+                  "trade_density_per_100_bars": 1.6,
+                  "trades": 4,
+                  "win_rate": 0.5
+                },
+                "metrics": {
+                  "avg_rr_realised": 0.597,
+                  "final_equity": 9955.65,
+                  "htf_timeframe": "1d",
+                  "ltf_timeframe": "4h",
+                  "max_drawdown_pct": -1.2422,
+                  "profit_factor": 0.5975,
+                  "return_pct": -0.4435,
+                  "symbol": "BTC/USDT",
+                  "trades": 4,
+                  "win_rate": 0.5
+                }
+              },
+              "val": {
+                "diagnostics": {
+                  "bars_seen": 250,
+                  "bottleneck": "sparse_signals",
+                  "drawdown": -1.0139,
+                  "pf": 0.0,
+                  "return_pct": -1.0139,
+                  "stage": "val",
+                  "trade_density_per_100_bars": 0.8,
+                  "trades": 2,
+                  "win_rate": 0.0
+                },
+                "metrics": {
+                  "avg_rr_realised": 0.0,
+                  "final_equity": 9898.61,
+                  "htf_timeframe": "1d",
+                  "ltf_timeframe": "4h",
+                  "max_drawdown_pct": -1.0139,
+                  "profit_factor": 0.0,
+                  "return_pct": -1.0139,
+                  "symbol": "BTC/USDT",
+                  "trades": 2,
+                  "win_rate": 0.0
+                }
+              }
+            }
+          ],
+          "passed": false,
+          "robustness": 0.12141944444444445,
+          "score": 0.12141944444444445,
+          "spread": 0.0
+        },
+        "wf_score": 0.12141944444444445
+      },
+      "notes": "",
+      "parameters": {
+        "allow_shorts": false,
+        "entry_mode": "trend",
+        "min_adx": 16.0,
+        "min_atr_rank": 0.35,
+        "min_bb_rank": 0.08000000000000002,
+        "rsi_long": 53.0,
+        "rsi_short": 49.0,
+        "use_breakout_filter": false,
+        "use_htf_filter": true,
+        "use_reclaim_filter": true,
+        "use_structure_filter": true,
+        "use_trend_filter": true,
+        "use_volume_filter": true
+      },
+      "parent_strategy_id": "evo_btc_usdt_4h_5413f4f8",
+      "regime_profile": "trend",
+      "robustness_score": 0.12141944444444445,
+      "source": "evolution",
+      "status": "candidate",
+      "tags": [
+        "btc/usdt",
+        "4h",
+        "evo",
+        "seed",
+        "mean_reversion",
+        "BTC/USDT",
+        "trend",
+        "cross_regime"
+      ],
+      "updated_at": "2026-04-29T09:25:28.354974+00:00",
+      "validated_at": null,
+      "version": 1
+    },
+    "BTC_USDT_4h_1777454730228_4115": {
+      "active": false,
+      "base_strategy": "evo_btc_usdt_4h_5413f4f8",
+      "created_at": "2026-04-29T09:25:30.243734+00:00",
+      "logic_hash": "5f23a4a62e84e9a3",
+      "metrics": {
+        "parent_score": 0.180149,
+        "wf": {
+          "diagnostics": {
+            "bottlenecks": [
+              [
+                "sparse_signals",
+                3
+              ]
+            ],
+            "mean_trade_density": 1.0667,
+            "zero_trade_folds": 0
+          },
+          "folds": [
+            {
+              "test": {
+                "diagnostics": {
+                  "bars_seen": 250,
+                  "bottleneck": "sparse_signals",
+                  "drawdown": -1.0139,
+                  "pf": 0.0,
+                  "return_pct": -1.0139,
+                  "stage": "test",
+                  "trade_density_per_100_bars": 0.8,
+                  "trades": 2,
+                  "win_rate": 0.0
+                },
+                "metrics": {
+                  "avg_rr_realised": 0.0,
+                  "final_equity": 9898.61,
+                  "htf_timeframe": "1d",
+                  "ltf_timeframe": "4h",
+                  "max_drawdown_pct": -1.0139,
+                  "profit_factor": 0.0,
+                  "return_pct": -1.0139,
+                  "symbol": "BTC/USDT",
+                  "trades": 2,
+                  "win_rate": 0.0
+                }
+              },
+              "train": {
+                "diagnostics": {
+                  "bars_seen": 250,
+                  "bottleneck": "sparse_signals",
+                  "drawdown": -1.2422,
+                  "pf": 0.5975,
+                  "return_pct": -0.4435,
+                  "stage": "train",
+                  "trade_density_per_100_bars": 1.6,
+                  "trades": 4,
+                  "win_rate": 0.5
+                },
+                "metrics": {
+                  "avg_rr_realised": 0.597,
+                  "final_equity": 9955.65,
+                  "htf_timeframe": "1d",
+                  "ltf_timeframe": "4h",
+                  "max_drawdown_pct": -1.2422,
+                  "profit_factor": 0.5975,
+                  "return_pct": -0.4435,
+                  "symbol": "BTC/USDT",
+                  "trades": 4,
+                  "win_rate": 0.5
+                }
+              },
+              "val": {
+                "diagnostics": {
+                  "bars_seen": 250,
+                  "bottleneck": "sparse_signals",
+                  "drawdown": -1.0139,
+                  "pf": 0.0,
+                  "return_pct": -1.0139,
+                  "stage": "val",
+                  "trade_density_per_100_bars": 0.8,
+                  "trades": 2,
+                  "win_rate": 0.0
+                },
+                "metrics": {
+                  "avg_rr_realised": 0.0,
+                  "final_equity": 9898.61,
+                  "htf_timeframe": "1d",
+                  "ltf_timeframe": "4h",
+                  "max_drawdown_pct": -1.0139,
+                  "profit_factor": 0.0,
+                  "return_pct": -1.0139,
+                  "symbol": "BTC/USDT",
+                  "trades": 2,
+                  "win_rate": 0.0
+                }
+              }
+            }
+          ],
+          "passed": false,
+          "robustness": 0.12141944444444445,
+          "score": 0.12141944444444445,
+          "spread": 0.0
+        },
+        "wf_score": 0.12141944444444445
+      },
+      "notes": "",
+      "parameters": {
+        "allow_shorts": false,
+        "entry_mode": "breakout",
+        "min_adx": 19.0,
+        "min_atr_rank": 0.08000000000000002,
+        "min_bb_rank": 0.09,
+        "rsi_long": 51.0,
+        "rsi_short": 49.0,
+        "use_breakout_filter": true,
+        "use_htf_filter": true,
+        "use_reclaim_filter": true,
+        "use_structure_filter": true,
+        "use_trend_filter": true,
+        "use_volume_filter": true
+      },
+      "parent_strategy_id": "evo_btc_usdt_4h_5413f4f8",
+      "regime_profile": "breakout",
+      "robustness_score": 0.12141944444444445,
+      "source": "evolution",
+      "status": "candidate",
+      "tags": [
+        "btc/usdt",
+        "4h",
+        "evo",
+        "seed",
+        "mean_reversion",
+        "BTC/USDT",
+        "breakout",
+        "structural"
+      ],
+      "updated_at": "2026-04-29T09:25:30.243734+00:00",
+      "validated_at": null,
+      "version": 1
+    },
+    "BTC_USDT_4h_1777454732116_7469": {
+      "active": false,
+      "base_strategy": "BTC_USDT_4h_1777452040197_3178",
+      "created_at": "2026-04-29T09:25:32.132288+00:00",
+      "logic_hash": "87911ddf5f6783ba",
+      "metrics": {
+        "parent_score": 0.15177430555555557,
+        "wf": {
+          "diagnostics": {
+            "bottlenecks": [
+              [
+                "sparse_signals",
+                3
+              ]
+            ],
+            "mean_trade_density": 1.0667,
+            "zero_trade_folds": 0
+          },
+          "folds": [
+            {
+              "test": {
+                "diagnostics": {
+                  "bars_seen": 250,
+                  "bottleneck": "sparse_signals",
+                  "drawdown": -1.0139,
+                  "pf": 0.0,
+                  "return_pct": -1.0139,
+                  "stage": "test",
+                  "trade_density_per_100_bars": 0.8,
+                  "trades": 2,
+                  "win_rate": 0.0
+                },
+                "metrics": {
+                  "avg_rr_realised": 0.0,
+                  "final_equity": 9898.61,
+                  "htf_timeframe": "1d",
+                  "ltf_timeframe": "4h",
+                  "max_drawdown_pct": -1.0139,
+                  "profit_factor": 0.0,
+                  "return_pct": -1.0139,
+                  "symbol": "BTC/USDT",
+                  "trades": 2,
+                  "win_rate": 0.0
+                }
+              },
+              "train": {
+                "diagnostics": {
+                  "bars_seen": 250,
+                  "bottleneck": "sparse_signals",
+                  "drawdown": -1.2422,
+                  "pf": 0.5975,
+                  "return_pct": -0.4435,
+                  "stage": "train",
+                  "trade_density_per_100_bars": 1.6,
+                  "trades": 4,
+                  "win_rate": 0.5
+                },
+                "metrics": {
+                  "avg_rr_realised": 0.597,
+                  "final_equity": 9955.65,
+                  "htf_timeframe": "1d",
+                  "ltf_timeframe": "4h",
+                  "max_drawdown_pct": -1.2422,
+                  "profit_factor": 0.5975,
+                  "return_pct": -0.4435,
+                  "symbol": "BTC/USDT",
+                  "trades": 4,
+                  "win_rate": 0.5
+                }
+              },
+              "val": {
+                "diagnostics": {
+                  "bars_seen": 250,
+                  "bottleneck": "sparse_signals",
+                  "drawdown": -1.0139,
+                  "pf": 0.0,
+                  "return_pct": -1.0139,
+                  "stage": "val",
+                  "trade_density_per_100_bars": 0.8,
+                  "trades": 2,
+                  "win_rate": 0.0
+                },
+                "metrics": {
+                  "avg_rr_realised": 0.0,
+                  "final_equity": 9898.61,
+                  "htf_timeframe": "1d",
+                  "ltf_timeframe": "4h",
+                  "max_drawdown_pct": -1.0139,
+                  "profit_factor": 0.0,
+                  "return_pct": -1.0139,
+                  "symbol": "BTC/USDT",
+                  "trades": 2,
+                  "win_rate": 0.0
+                }
+              }
+            }
+          ],
+          "passed": false,
+          "robustness": 0.12141944444444445,
+          "score": 0.12141944444444445,
+          "spread": 0.0
+        },
+        "wf_score": 0.12141944444444445
+      },
+      "notes": "",
+      "parameters": {
+        "allow_shorts": false,
+        "entry_mode": "mean_reversion",
+        "min_adx": 8.0,
+        "min_atr_rank": 0.15000000000000002,
+        "min_bb_rank": 0.15000000000000002,
+        "rsi_long": 49.0,
+        "rsi_short": 51.0,
+        "use_breakout_filter": false,
+        "use_htf_filter": true,
+        "use_reclaim_filter": true,
+        "use_structure_filter": true,
+        "use_trend_filter": true,
+        "use_volume_filter": true
+      },
+      "parent_strategy_id": "BTC_USDT_4h_1777452040197_3178",
+      "regime_profile": "mean_reversion",
+      "robustness_score": 0.12141944444444445,
+      "source": "evolution",
+      "status": "candidate",
+      "tags": [
+        "btc/usdt",
+        "4h",
+        "evo",
+        "seed",
+        "mean_reversion",
+        "BTC/USDT",
+        "exploit"
+      ],
+      "updated_at": "2026-04-29T09:25:32.132288+00:00",
+      "validated_at": null,
+      "version": 1
+    },
+    "BTC_USDT_4h_1777454733982_4124": {
+      "active": false,
+      "base_strategy": "BTC_USDT_4h_1777452040197_3178",
+      "created_at": "2026-04-29T09:25:34.001224+00:00",
+      "logic_hash": "2bcede916810407a",
+      "metrics": {
+        "parent_score": 0.15177430555555557,
+        "wf": {
+          "diagnostics": {
+            "bottlenecks": [
+              [
+                "sparse_signals",
+                3
+              ]
+            ],
+            "mean_trade_density": 1.0667,
+            "zero_trade_folds": 0
+          },
+          "folds": [
+            {
+              "test": {
+                "diagnostics": {
+                  "bars_seen": 250,
+                  "bottleneck": "sparse_signals",
+                  "drawdown": -1.0139,
+                  "pf": 0.0,
+                  "return_pct": -1.0139,
+                  "stage": "test",
+                  "trade_density_per_100_bars": 0.8,
+                  "trades": 2,
+                  "win_rate": 0.0
+                },
+                "metrics": {
+                  "avg_rr_realised": 0.0,
+                  "final_equity": 9898.61,
+                  "htf_timeframe": "1d",
+                  "ltf_timeframe": "4h",
+                  "max_drawdown_pct": -1.0139,
+                  "profit_factor": 0.0,
+                  "return_pct": -1.0139,
+                  "symbol": "BTC/USDT",
+                  "trades": 2,
+                  "win_rate": 0.0
+                }
+              },
+              "train": {
+                "diagnostics": {
+                  "bars_seen": 250,
+                  "bottleneck": "sparse_signals",
+                  "drawdown": -1.2422,
+                  "pf": 0.5975,
+                  "return_pct": -0.4435,
+                  "stage": "train",
+                  "trade_density_per_100_bars": 1.6,
+                  "trades": 4,
+                  "win_rate": 0.5
+                },
+                "metrics": {
+                  "avg_rr_realised": 0.597,
+                  "final_equity": 9955.65,
+                  "htf_timeframe": "1d",
+                  "ltf_timeframe": "4h",
+                  "max_drawdown_pct": -1.2422,
+                  "profit_factor": 0.5975,
+                  "return_pct": -0.4435,
+                  "symbol": "BTC/USDT",
+                  "trades": 4,
+                  "win_rate": 0.5
+                }
+              },
+              "val": {
+                "diagnostics": {
+                  "bars_seen": 250,
+                  "bottleneck": "sparse_signals",
+                  "drawdown": -1.0139,
+                  "pf": 0.0,
+                  "return_pct": -1.0139,
+                  "stage": "val",
+                  "trade_density_per_100_bars": 0.8,
+                  "trades": 2,
+                  "win_rate": 0.0
+                },
+                "metrics": {
+                  "avg_rr_realised": 0.0,
+                  "final_equity": 9898.61,
+                  "htf_timeframe": "1d",
+                  "ltf_timeframe": "4h",
+                  "max_drawdown_pct": -1.0139,
+                  "profit_factor": 0.0,
+                  "return_pct": -1.0139,
+                  "symbol": "BTC/USDT",
+                  "trades": 2,
+                  "win_rate": 0.0
+                }
+              }
+            }
+          ],
+          "passed": false,
+          "robustness": 0.12141944444444445,
+          "score": 0.12141944444444445,
+          "spread": 0.0
+        },
+        "wf_score": 0.12141944444444445
+      },
+      "notes": "",
+      "parameters": {
+        "allow_shorts": false,
+        "entry_mode": "trend",
+        "min_adx": 11.0,
+        "min_atr_rank": 0.33,
+        "min_bb_rank": 0.13,
+        "rsi_long": 49.0,
+        "rsi_short": 49.0,
+        "use_breakout_filter": false,
+        "use_htf_filter": true,
+        "use_reclaim_filter": true,
+        "use_structure_filter": true,
+        "use_trend_filter": true,
+        "use_volume_filter": true
+      },
+      "parent_strategy_id": "BTC_USDT_4h_1777452040197_3178",
+      "regime_profile": "trend",
+      "robustness_score": 0.12141944444444445,
+      "source": "evolution",
+      "status": "candidate",
+      "tags": [
+        "btc/usdt",
+        "4h",
+        "evo",
+        "seed",
+        "mean_reversion",
+        "BTC/USDT",
+        "trend",
+        "cross_regime"
+      ],
+      "updated_at": "2026-04-29T09:25:34.001224+00:00",
+      "validated_at": null,
+      "version": 1
+    },
+    "BTC_USDT_4h_1777454735905_4261": {
+      "active": false,
+      "base_strategy": "BTC_USDT_4h_1777452040197_3178",
+      "created_at": "2026-04-29T09:25:35.921323+00:00",
+      "logic_hash": "cfe503470275c9c6",
+      "metrics": {
+        "parent_score": 0.15177430555555557,
+        "wf": {
+          "diagnostics": {
+            "bottlenecks": [
+              [
+                "sparse_signals",
+                3
+              ]
+            ],
+            "mean_trade_density": 1.0667,
+            "zero_trade_folds": 0
+          },
+          "folds": [
+            {
+              "test": {
+                "diagnostics": {
+                  "bars_seen": 250,
+                  "bottleneck": "sparse_signals",
+                  "drawdown": -1.0139,
+                  "pf": 0.0,
+                  "return_pct": -1.0139,
+                  "stage": "test",
+                  "trade_density_per_100_bars": 0.8,
+                  "trades": 2,
+                  "win_rate": 0.0
+                },
+                "metrics": {
+                  "avg_rr_realised": 0.0,
+                  "final_equity": 9898.61,
+                  "htf_timeframe": "1d",
+                  "ltf_timeframe": "4h",
+                  "max_drawdown_pct": -1.0139,
+                  "profit_factor": 0.0,
+                  "return_pct": -1.0139,
+                  "symbol": "BTC/USDT",
+                  "trades": 2,
+                  "win_rate": 0.0
+                }
+              },
+              "train": {
+                "diagnostics": {
+                  "bars_seen": 250,
+                  "bottleneck": "sparse_signals",
+                  "drawdown": -1.2422,
+                  "pf": 0.5975,
+                  "return_pct": -0.4435,
+                  "stage": "train",
+                  "trade_density_per_100_bars": 1.6,
+                  "trades": 4,
+                  "win_rate": 0.5
+                },
+                "metrics": {
+                  "avg_rr_realised": 0.597,
+                  "final_equity": 9955.65,
+                  "htf_timeframe": "1d",
+                  "ltf_timeframe": "4h",
+                  "max_drawdown_pct": -1.2422,
+                  "profit_factor": 0.5975,
+                  "return_pct": -0.4435,
+                  "symbol": "BTC/USDT",
+                  "trades": 4,
+                  "win_rate": 0.5
+                }
+              },
+              "val": {
+                "diagnostics": {
+                  "bars_seen": 250,
+                  "bottleneck": "sparse_signals",
+                  "drawdown": -1.0139,
+                  "pf": 0.0,
+                  "return_pct": -1.0139,
+                  "stage": "val",
+                  "trade_density_per_100_bars": 0.8,
+                  "trades": 2,
+                  "win_rate": 0.0
+                },
+                "metrics": {
+                  "avg_rr_realised": 0.0,
+                  "final_equity": 9898.61,
+                  "htf_timeframe": "1d",
+                  "ltf_timeframe": "4h",
+                  "max_drawdown_pct": -1.0139,
+                  "profit_factor": 0.0,
+                  "return_pct": -1.0139,
+                  "symbol": "BTC/USDT",
+                  "trades": 2,
+                  "win_rate": 0.0
+                }
+              }
+            }
+          ],
+          "passed": false,
+          "robustness": 0.12141944444444445,
+          "score": 0.12141944444444445,
+          "spread": 0.0
+        },
+        "wf_score": 0.12141944444444445
+      },
+      "notes": "",
+      "parameters": {
+        "allow_shorts": false,
+        "entry_mode": "breakout",
+        "min_adx": 14.0,
+        "min_atr_rank": 0.13,
+        "min_bb_rank": 0.26,
+        "rsi_long": 63.0,
+        "rsi_short": 45.0,
+        "use_breakout_filter": true,
+        "use_htf_filter": true,
+        "use_reclaim_filter": true,
+        "use_structure_filter": true,
+        "use_trend_filter": true,
+        "use_volume_filter": true
+      },
+      "parent_strategy_id": "BTC_USDT_4h_1777452040197_3178",
+      "regime_profile": "breakout",
+      "robustness_score": 0.12141944444444445,
+      "source": "evolution",
+      "status": "candidate",
+      "tags": [
+        "btc/usdt",
+        "4h",
+        "evo",
+        "seed",
+        "mean_reversion",
+        "BTC/USDT",
+        "breakout",
+        "structural"
+      ],
+      "updated_at": "2026-04-29T09:25:35.921323+00:00",
+      "validated_at": null,
+      "version": 1
+    },
+    "BTC_USDT_4h_1777454737803_3657": {
+      "active": false,
+      "base_strategy": "BTC_USDT_4h_1777452038136_8890",
+      "created_at": "2026-04-29T09:25:37.818183+00:00",
+      "logic_hash": "4ec64fafd687b451",
+      "metrics": {
+        "parent_score": 0.15177430555555557,
+        "wf": {
+          "diagnostics": {
+            "bottlenecks": [
+              [
+                "sparse_signals",
+                3
+              ]
+            ],
+            "mean_trade_density": 1.0667,
+            "zero_trade_folds": 0
+          },
+          "folds": [
+            {
+              "test": {
+                "diagnostics": {
+                  "bars_seen": 250,
+                  "bottleneck": "sparse_signals",
+                  "drawdown": -1.0139,
+                  "pf": 0.0,
+                  "return_pct": -1.0139,
+                  "stage": "test",
+                  "trade_density_per_100_bars": 0.8,
+                  "trades": 2,
+                  "win_rate": 0.0
+                },
+                "metrics": {
+                  "avg_rr_realised": 0.0,
+                  "final_equity": 9898.61,
+                  "htf_timeframe": "1d",
+                  "ltf_timeframe": "4h",
+                  "max_drawdown_pct": -1.0139,
+                  "profit_factor": 0.0,
+                  "return_pct": -1.0139,
+                  "symbol": "BTC/USDT",
+                  "trades": 2,
+                  "win_rate": 0.0
+                }
+              },
+              "train": {
+                "diagnostics": {
+                  "bars_seen": 250,
+                  "bottleneck": "sparse_signals",
+                  "drawdown": -1.2422,
+                  "pf": 0.5975,
+                  "return_pct": -0.4435,
+                  "stage": "train",
+                  "trade_density_per_100_bars": 1.6,
+                  "trades": 4,
+                  "win_rate": 0.5
+                },
+                "metrics": {
+                  "avg_rr_realised": 0.597,
+                  "final_equity": 9955.65,
+                  "htf_timeframe": "1d",
+                  "ltf_timeframe": "4h",
+                  "max_drawdown_pct": -1.2422,
+                  "profit_factor": 0.5975,
+                  "return_pct": -0.4435,
+                  "symbol": "BTC/USDT",
+                  "trades": 4,
+                  "win_rate": 0.5
+                }
+              },
+              "val": {
+                "diagnostics": {
+                  "bars_seen": 250,
+                  "bottleneck": "sparse_signals",
+                  "drawdown": -1.0139,
+                  "pf": 0.0,
+                  "return_pct": -1.0139,
+                  "stage": "val",
+                  "trade_density_per_100_bars": 0.8,
+                  "trades": 2,
+                  "win_rate": 0.0
+                },
+                "metrics": {
+                  "avg_rr_realised": 0.0,
+                  "final_equity": 9898.61,
+                  "htf_timeframe": "1d",
+                  "ltf_timeframe": "4h",
+                  "max_drawdown_pct": -1.0139,
+                  "profit_factor": 0.0,
+                  "return_pct": -1.0139,
+                  "symbol": "BTC/USDT",
+                  "trades": 2,
+                  "win_rate": 0.0
+                }
+              }
+            }
+          ],
+          "passed": false,
+          "robustness": 0.12141944444444445,
+          "score": 0.12141944444444445,
+          "spread": 0.0
+        },
+        "wf_score": 0.12141944444444445
+      },
+      "notes": "",
+      "parameters": {
+        "allow_shorts": false,
+        "entry_mode": "mean_reversion",
+        "min_adx": 8.0,
+        "min_atr_rank": 0.15000000000000002,
+        "min_bb_rank": 0.15000000000000002,
+        "rsi_long": 44.0,
+        "rsi_short": 51.0,
+        "use_breakout_filter": false,
+        "use_htf_filter": true,
+        "use_reclaim_filter": true,
+        "use_structure_filter": true,
+        "use_trend_filter": true,
+        "use_volume_filter": true
+      },
+      "parent_strategy_id": "BTC_USDT_4h_1777452038136_8890",
+      "regime_profile": "mean_reversion",
+      "robustness_score": 0.12141944444444445,
+      "source": "evolution",
+      "status": "candidate",
+      "tags": [
+        "btc/usdt",
+        "4h",
+        "evo",
+        "seed",
+        "mean_reversion",
+        "BTC/USDT",
+        "exploit"
+      ],
+      "updated_at": "2026-04-29T09:25:37.818183+00:00",
+      "validated_at": null,
+      "version": 1
+    },
+    "BTC_USDT_4h_1777454739705_8296": {
+      "active": false,
+      "base_strategy": "BTC_USDT_4h_1777452038136_8890",
+      "created_at": "2026-04-29T09:25:39.722866+00:00",
+      "logic_hash": "363e34ab83e960a1",
+      "metrics": {
+        "parent_score": 0.15177430555555557,
+        "wf": {
+          "diagnostics": {
+            "bottlenecks": [
+              [
+                "sparse_signals",
+                3
+              ]
+            ],
+            "mean_trade_density": 1.0667,
+            "zero_trade_folds": 0
+          },
+          "folds": [
+            {
+              "test": {
+                "diagnostics": {
+                  "bars_seen": 250,
+                  "bottleneck": "sparse_signals",
+                  "drawdown": -1.0139,
+                  "pf": 0.0,
+                  "return_pct": -1.0139,
+                  "stage": "test",
+                  "trade_density_per_100_bars": 0.8,
+                  "trades": 2,
+                  "win_rate": 0.0
+                },
+                "metrics": {
+                  "avg_rr_realised": 0.0,
+                  "final_equity": 9898.61,
+                  "htf_timeframe": "1d",
+                  "ltf_timeframe": "4h",
+                  "max_drawdown_pct": -1.0139,
+                  "profit_factor": 0.0,
+                  "return_pct": -1.0139,
+                  "symbol": "BTC/USDT",
+                  "trades": 2,
+                  "win_rate": 0.0
+                }
+              },
+              "train": {
+                "diagnostics": {
+                  "bars_seen": 250,
+                  "bottleneck": "sparse_signals",
+                  "drawdown": -1.2422,
+                  "pf": 0.5975,
+                  "return_pct": -0.4435,
+                  "stage": "train",
+                  "trade_density_per_100_bars": 1.6,
+                  "trades": 4,
+                  "win_rate": 0.5
+                },
+                "metrics": {
+                  "avg_rr_realised": 0.597,
+                  "final_equity": 9955.65,
+                  "htf_timeframe": "1d",
+                  "ltf_timeframe": "4h",
+                  "max_drawdown_pct": -1.2422,
+                  "profit_factor": 0.5975,
+                  "return_pct": -0.4435,
+                  "symbol": "BTC/USDT",
+                  "trades": 4,
+                  "win_rate": 0.5
+                }
+              },
+              "val": {
+                "diagnostics": {
+                  "bars_seen": 250,
+                  "bottleneck": "sparse_signals",
+                  "drawdown": -1.0139,
+                  "pf": 0.0,
+                  "return_pct": -1.0139,
+                  "stage": "val",
+                  "trade_density_per_100_bars": 0.8,
+                  "trades": 2,
+                  "win_rate": 0.0
+                },
+                "metrics": {
+                  "avg_rr_realised": 0.0,
+                  "final_equity": 9898.61,
+                  "htf_timeframe": "1d",
+                  "ltf_timeframe": "4h",
+                  "max_drawdown_pct": -1.0139,
+                  "profit_factor": 0.0,
+                  "return_pct": -1.0139,
+                  "symbol": "BTC/USDT",
+                  "trades": 2,
+                  "win_rate": 0.0
+                }
+              }
+            }
+          ],
+          "passed": false,
+          "robustness": 0.12141944444444445,
+          "score": 0.12141944444444445,
+          "spread": 0.0
+        },
+        "wf_score": 0.12141944444444445
+      },
+      "notes": "",
+      "parameters": {
+        "allow_shorts": false,
+        "entry_mode": "trend",
+        "min_adx": 14.0,
+        "min_atr_rank": 0.16000000000000003,
+        "min_bb_rank": 0.3,
+        "rsi_long": 48.0,
+        "rsi_short": 45.0,
+        "use_breakout_filter": true,
+        "use_htf_filter": true,
+        "use_reclaim_filter": true,
+        "use_structure_filter": true,
+        "use_trend_filter": true,
+        "use_volume_filter": true
+      },
+      "parent_strategy_id": "BTC_USDT_4h_1777452038136_8890",
+      "regime_profile": "trend",
+      "robustness_score": 0.12141944444444445,
+      "source": "evolution",
+      "status": "candidate",
+      "tags": [
+        "btc/usdt",
+        "4h",
+        "evo",
+        "seed",
+        "mean_reversion",
+        "BTC/USDT",
+        "trend",
+        "cross_regime"
+      ],
+      "updated_at": "2026-04-29T09:25:39.722866+00:00",
+      "validated_at": null,
+      "version": 1
+    },
+    "BTC_USDT_4h_1777454741575_2439": {
+      "active": false,
+      "base_strategy": "BTC_USDT_4h_1777452038136_8890",
+      "created_at": "2026-04-29T09:25:41.590985+00:00",
+      "logic_hash": "498a1710ae7516d4",
+      "metrics": {
+        "parent_score": 0.15177430555555557,
+        "wf": {
+          "diagnostics": {
+            "bottlenecks": [
+              [
+                "sparse_signals",
+                3
+              ]
+            ],
+            "mean_trade_density": 1.0667,
+            "zero_trade_folds": 0
+          },
+          "folds": [
+            {
+              "test": {
+                "diagnostics": {
+                  "bars_seen": 250,
+                  "bottleneck": "sparse_signals",
+                  "drawdown": -1.0139,
+                  "pf": 0.0,
+                  "return_pct": -1.0139,
+                  "stage": "test",
+                  "trade_density_per_100_bars": 0.8,
+                  "trades": 2,
+                  "win_rate": 0.0
+                },
+                "metrics": {
+                  "avg_rr_realised": 0.0,
+                  "final_equity": 9898.61,
+                  "htf_timeframe": "1d",
+                  "ltf_timeframe": "4h",
+                  "max_drawdown_pct": -1.0139,
+                  "profit_factor": 0.0,
+                  "return_pct": -1.0139,
+                  "symbol": "BTC/USDT",
+                  "trades": 2,
+                  "win_rate": 0.0
+                }
+              },
+              "train": {
+                "diagnostics": {
+                  "bars_seen": 250,
+                  "bottleneck": "sparse_signals",
+                  "drawdown": -1.2422,
+                  "pf": 0.5975,
+                  "return_pct": -0.4435,
+                  "stage": "train",
+                  "trade_density_per_100_bars": 1.6,
+                  "trades": 4,
+                  "win_rate": 0.5
+                },
+                "metrics": {
+                  "avg_rr_realised": 0.597,
+                  "final_equity": 9955.65,
+                  "htf_timeframe": "1d",
+                  "ltf_timeframe": "4h",
+                  "max_drawdown_pct": -1.2422,
+                  "profit_factor": 0.5975,
+                  "return_pct": -0.4435,
+                  "symbol": "BTC/USDT",
+                  "trades": 4,
+                  "win_rate": 0.5
+                }
+              },
+              "val": {
+                "diagnostics": {
+                  "bars_seen": 250,
+                  "bottleneck": "sparse_signals",
+                  "drawdown": -1.0139,
+                  "pf": 0.0,
+                  "return_pct": -1.0139,
+                  "stage": "val",
+                  "trade_density_per_100_bars": 0.8,
+                  "trades": 2,
+                  "win_rate": 0.0
+                },
+                "metrics": {
+                  "avg_rr_realised": 0.0,
+                  "final_equity": 9898.61,
+                  "htf_timeframe": "1d",
+                  "ltf_timeframe": "4h",
+                  "max_drawdown_pct": -1.0139,
+                  "profit_factor": 0.0,
+                  "return_pct": -1.0139,
+                  "symbol": "BTC/USDT",
+                  "trades": 2,
+                  "win_rate": 0.0
+                }
+              }
+            }
+          ],
+          "passed": false,
+          "robustness": 0.12141944444444445,
+          "score": 0.12141944444444445,
+          "spread": 0.0
+        },
+        "wf_score": 0.12141944444444445
+      },
+      "notes": "",
+      "parameters": {
+        "allow_shorts": false,
+        "entry_mode": "breakout",
+        "min_adx": 19.0,
+        "min_atr_rank": 0.3,
+        "min_bb_rank": 0.21000000000000002,
+        "rsi_long": 46.0,
+        "rsi_short": 41.0,
+        "use_breakout_filter": true,
+        "use_htf_filter": true,
+        "use_reclaim_filter": true,
+        "use_structure_filter": true,
+        "use_trend_filter": true,
+        "use_volume_filter": true
+      },
+      "parent_strategy_id": "BTC_USDT_4h_1777452038136_8890",
+      "regime_profile": "breakout",
+      "robustness_score": 0.12141944444444445,
+      "source": "evolution",
+      "status": "candidate",
+      "tags": [
+        "btc/usdt",
+        "4h",
+        "evo",
+        "seed",
+        "mean_reversion",
+        "BTC/USDT",
+        "breakout",
+        "structural"
+      ],
+      "updated_at": "2026-04-29T09:25:41.590985+00:00",
+      "validated_at": null,
+      "version": 1
+    },
+    "BTC_USDT_4h_1777455371487_5004": {
+      "active": false,
+      "base_strategy": "evo_btc_usdt_4h_5413f4f8",
+      "created_at": "2026-04-29T09:36:11.495837+00:00",
+      "logic_hash": "779e15c8b90cb854",
+      "metrics": {
+        "parent_score": 0.180149,
+        "wf": {
+          "diagnostics": {
+            "bottlenecks": [
+              [
+                "sparse_signals",
+                3
+              ]
+            ],
+            "mean_trade_density": 1.0667,
+            "zero_trade_folds": 0
+          },
+          "folds": [
+            {
+              "test": {
+                "diagnostics": {
+                  "bars_seen": 250,
+                  "bottleneck": "sparse_signals",
+                  "drawdown": -1.0139,
+                  "pf": 0.0,
+                  "return_pct": -1.0139,
+                  "stage": "test",
+                  "trade_density_per_100_bars": 0.8,
+                  "trades": 2,
+                  "win_rate": 0.0
+                },
+                "metrics": {
+                  "avg_rr_realised": 0.0,
+                  "final_equity": 9898.61,
+                  "htf_timeframe": "1d",
+                  "ltf_timeframe": "4h",
+                  "max_drawdown_pct": -1.0139,
+                  "profit_factor": 0.0,
+                  "return_pct": -1.0139,
+                  "symbol": "BTC/USDT",
+                  "trades": 2,
+                  "win_rate": 0.0
+                }
+              },
+              "train": {
+                "diagnostics": {
+                  "bars_seen": 250,
+                  "bottleneck": "sparse_signals",
+                  "drawdown": -1.2422,
+                  "pf": 0.5975,
+                  "return_pct": -0.4435,
+                  "stage": "train",
+                  "trade_density_per_100_bars": 1.6,
+                  "trades": 4,
+                  "win_rate": 0.5
+                },
+                "metrics": {
+                  "avg_rr_realised": 0.597,
+                  "final_equity": 9955.65,
+                  "htf_timeframe": "1d",
+                  "ltf_timeframe": "4h",
+                  "max_drawdown_pct": -1.2422,
+                  "profit_factor": 0.5975,
+                  "return_pct": -0.4435,
+                  "symbol": "BTC/USDT",
+                  "trades": 4,
+                  "win_rate": 0.5
+                }
+              },
+              "val": {
+                "diagnostics": {
+                  "bars_seen": 250,
+                  "bottleneck": "sparse_signals",
+                  "drawdown": -1.0139,
+                  "pf": 0.0,
+                  "return_pct": -1.0139,
+                  "stage": "val",
+                  "trade_density_per_100_bars": 0.8,
+                  "trades": 2,
+                  "win_rate": 0.0
+                },
+                "metrics": {
+                  "avg_rr_realised": 0.0,
+                  "final_equity": 9898.61,
+                  "htf_timeframe": "1d",
+                  "ltf_timeframe": "4h",
+                  "max_drawdown_pct": -1.0139,
+                  "profit_factor": 0.0,
+                  "return_pct": -1.0139,
+                  "symbol": "BTC/USDT",
+                  "trades": 2,
+                  "win_rate": 0.0
+                }
+              }
+            }
+          ],
+          "passed": false,
+          "robustness": 0.12141944444444445,
+          "score": 0.12141944444444445,
+          "spread": 0.0
+        },
+        "wf_score": 0.12141944444444445
+      },
+      "notes": "",
+      "parameters": {
+        "allow_shorts": true,
+        "entry_mode": "mean_reversion",
+        "min_adx": 8.0,
+        "min_atr_rank": 0.05,
+        "min_bb_rank": 0.05,
+        "rsi_long": 45.0,
+        "rsi_short": 55.0,
+        "use_breakout_filter": false,
+        "use_htf_filter": true,
+        "use_reclaim_filter": true,
+        "use_structure_filter": true,
+        "use_trend_filter": true,
+        "use_volume_filter": true
+      },
+      "parent_strategy_id": "evo_btc_usdt_4h_5413f4f8",
+      "regime_profile": "mean_reversion",
+      "robustness_score": 0.12141944444444445,
+      "source": "evolution",
+      "status": "candidate",
+      "tags": [
+        "btc/usdt",
+        "4h",
+        "evo",
+        "seed",
+        "mean_reversion",
+        "BTC/USDT",
+        "exploit",
+        "signal_expansion"
+      ],
+      "updated_at": "2026-04-29T09:36:11.495837+00:00",
+      "validated_at": null,
+      "version": 1
+    },
+    "BTC_USDT_4h_1777455374317_1629": {
+      "active": false,
+      "base_strategy": "evo_btc_usdt_4h_5413f4f8",
+      "created_at": "2026-04-29T09:36:14.370557+00:00",
+      "logic_hash": "a2030c66a612b2a6",
+      "metrics": {
+        "parent_score": 0.180149,
+        "wf": {
+          "diagnostics": {
+            "bottlenecks": [
+              [
+                "sparse_signals",
+                3
+              ]
+            ],
+            "mean_trade_density": 1.0667,
+            "zero_trade_folds": 0
+          },
+          "folds": [
+            {
+              "test": {
+                "diagnostics": {
+                  "bars_seen": 250,
+                  "bottleneck": "sparse_signals",
+                  "drawdown": -1.0139,
+                  "pf": 0.0,
+                  "return_pct": -1.0139,
+                  "stage": "test",
+                  "trade_density_per_100_bars": 0.8,
+                  "trades": 2,
+                  "win_rate": 0.0
+                },
+                "metrics": {
+                  "avg_rr_realised": 0.0,
+                  "final_equity": 9898.61,
+                  "htf_timeframe": "1d",
+                  "ltf_timeframe": "4h",
+                  "max_drawdown_pct": -1.0139,
+                  "profit_factor": 0.0,
+                  "return_pct": -1.0139,
+                  "symbol": "BTC/USDT",
+                  "trades": 2,
+                  "win_rate": 0.0
+                }
+              },
+              "train": {
+                "diagnostics": {
+                  "bars_seen": 250,
+                  "bottleneck": "sparse_signals",
+                  "drawdown": -1.2422,
+                  "pf": 0.5975,
+                  "return_pct": -0.4435,
+                  "stage": "train",
+                  "trade_density_per_100_bars": 1.6,
+                  "trades": 4,
+                  "win_rate": 0.5
+                },
+                "metrics": {
+                  "avg_rr_realised": 0.597,
+                  "final_equity": 9955.65,
+                  "htf_timeframe": "1d",
+                  "ltf_timeframe": "4h",
+                  "max_drawdown_pct": -1.2422,
+                  "profit_factor": 0.5975,
+                  "return_pct": -0.4435,
+                  "symbol": "BTC/USDT",
+                  "trades": 4,
+                  "win_rate": 0.5
+                }
+              },
+              "val": {
+                "diagnostics": {
+                  "bars_seen": 250,
+                  "bottleneck": "sparse_signals",
+                  "drawdown": -1.0139,
+                  "pf": 0.0,
+                  "return_pct": -1.0139,
+                  "stage": "val",
+                  "trade_density_per_100_bars": 0.8,
+                  "trades": 2,
+                  "win_rate": 0.0
+                },
+                "metrics": {
+                  "avg_rr_realised": 0.0,
+                  "final_equity": 9898.61,
+                  "htf_timeframe": "1d",
+                  "ltf_timeframe": "4h",
+                  "max_drawdown_pct": -1.0139,
+                  "profit_factor": 0.0,
+                  "return_pct": -1.0139,
+                  "symbol": "BTC/USDT",
+                  "trades": 2,
+                  "win_rate": 0.0
+                }
+              }
+            }
+          ],
+          "passed": false,
+          "robustness": 0.12141944444444445,
+          "score": 0.12141944444444445,
+          "spread": 0.0
+        },
+        "wf_score": 0.12141944444444445
+      },
+      "notes": "",
+      "parameters": {
+        "allow_shorts": true,
+        "entry_mode": "trend",
+        "min_adx": 21.0,
+        "min_atr_rank": 0.31,
+        "min_bb_rank": 0.13,
+        "rsi_long": 51.0,
+        "rsi_short": 38.0,
+        "use_breakout_filter": false,
+        "use_htf_filter": true,
+        "use_reclaim_filter": true,
+        "use_structure_filter": true,
+        "use_trend_filter": true,
+        "use_volume_filter": true
+      },
+      "parent_strategy_id": "evo_btc_usdt_4h_5413f4f8",
+      "regime_profile": "trend",
+      "robustness_score": 0.12141944444444445,
+      "source": "evolution",
+      "status": "candidate",
+      "tags": [
+        "btc/usdt",
+        "4h",
+        "evo",
+        "seed",
+        "mean_reversion",
+        "BTC/USDT",
+        "trend",
+        "cross_regime",
+        "signal_expansion"
+      ],
+      "updated_at": "2026-04-29T09:36:14.370557+00:00",
+      "validated_at": null,
+      "version": 1
+    },
+    "BTC_USDT_4h_1777455377321_1322": {
+      "active": false,
+      "base_strategy": "evo_btc_usdt_4h_5413f4f8",
+      "created_at": "2026-04-29T09:36:17.337851+00:00",
+      "logic_hash": "a001577f51ae38d7",
+      "metrics": {
+        "parent_score": 0.180149,
+        "wf": {
+          "diagnostics": {
+            "bottlenecks": [
+              [
+                "sparse_signals",
+                3
+              ]
+            ],
+            "mean_trade_density": 1.0667,
+            "zero_trade_folds": 0
+          },
+          "folds": [
+            {
+              "test": {
+                "diagnostics": {
+                  "bars_seen": 250,
+                  "bottleneck": "sparse_signals",
+                  "drawdown": -1.0139,
+                  "pf": 0.0,
+                  "return_pct": -1.0139,
+                  "stage": "test",
+                  "trade_density_per_100_bars": 0.8,
+                  "trades": 2,
+                  "win_rate": 0.0
+                },
+                "metrics": {
+                  "avg_rr_realised": 0.0,
+                  "final_equity": 9898.61,
+                  "htf_timeframe": "1d",
+                  "ltf_timeframe": "4h",
+                  "max_drawdown_pct": -1.0139,
+                  "profit_factor": 0.0,
+                  "return_pct": -1.0139,
+                  "symbol": "BTC/USDT",
+                  "trades": 2,
+                  "win_rate": 0.0
+                }
+              },
+              "train": {
+                "diagnostics": {
+                  "bars_seen": 250,
+                  "bottleneck": "sparse_signals",
+                  "drawdown": -1.2422,
+                  "pf": 0.5975,
+                  "return_pct": -0.4435,
+                  "stage": "train",
+                  "trade_density_per_100_bars": 1.6,
+                  "trades": 4,
+                  "win_rate": 0.5
+                },
+                "metrics": {
+                  "avg_rr_realised": 0.597,
+                  "final_equity": 9955.65,
+                  "htf_timeframe": "1d",
+                  "ltf_timeframe": "4h",
+                  "max_drawdown_pct": -1.2422,
+                  "profit_factor": 0.5975,
+                  "return_pct": -0.4435,
+                  "symbol": "BTC/USDT",
+                  "trades": 4,
+                  "win_rate": 0.5
+                }
+              },
+              "val": {
+                "diagnostics": {
+                  "bars_seen": 250,
+                  "bottleneck": "sparse_signals",
+                  "drawdown": -1.0139,
+                  "pf": 0.0,
+                  "return_pct": -1.0139,
+                  "stage": "val",
+                  "trade_density_per_100_bars": 0.8,
+                  "trades": 2,
+                  "win_rate": 0.0
+                },
+                "metrics": {
+                  "avg_rr_realised": 0.0,
+                  "final_equity": 9898.61,
+                  "htf_timeframe": "1d",
+                  "ltf_timeframe": "4h",
+                  "max_drawdown_pct": -1.0139,
+                  "profit_factor": 0.0,
+                  "return_pct": -1.0139,
+                  "symbol": "BTC/USDT",
+                  "trades": 2,
+                  "win_rate": 0.0
+                }
+              }
+            }
+          ],
+          "passed": false,
+          "robustness": 0.12141944444444445,
+          "score": 0.12141944444444445,
+          "spread": 0.0
+        },
+        "wf_score": 0.12141944444444445
+      },
+      "notes": "",
+      "parameters": {
+        "allow_shorts": true,
+        "entry_mode": "breakout",
+        "min_adx": 20.0,
+        "min_atr_rank": 0.19999999999999998,
+        "min_bb_rank": 0.11000000000000001,
+        "rsi_long": 50.0,
+        "rsi_short": 54.0,
+        "use_breakout_filter": true,
+        "use_htf_filter": true,
+        "use_reclaim_filter": true,
+        "use_structure_filter": true,
+        "use_trend_filter": true,
+        "use_volume_filter": true
+      },
+      "parent_strategy_id": "evo_btc_usdt_4h_5413f4f8",
+      "regime_profile": "breakout",
+      "robustness_score": 0.12141944444444445,
+      "source": "evolution",
+      "status": "candidate",
+      "tags": [
+        "btc/usdt",
+        "4h",
+        "evo",
+        "seed",
+        "mean_reversion",
+        "BTC/USDT",
+        "breakout",
+        "structural",
+        "signal_expansion"
+      ],
+      "updated_at": "2026-04-29T09:36:17.337851+00:00",
+      "validated_at": null,
+      "version": 1
+    },
+    "BTC_USDT_4h_1777455380179_3126": {
+      "active": false,
+      "base_strategy": "BTC_USDT_4h_1777454741575_2439",
+      "created_at": "2026-04-29T09:36:20.194805+00:00",
+      "logic_hash": "eb1f7297d0fcdbed",
+      "metrics": {
+        "parent_score": 0.15177430555555557,
+        "wf": {
+          "diagnostics": {
+            "bottlenecks": [
+              [
+                "sparse_signals",
+                3
+              ]
+            ],
+            "mean_trade_density": 1.0667,
+            "zero_trade_folds": 0
+          },
+          "folds": [
+            {
+              "test": {
+                "diagnostics": {
+                  "bars_seen": 250,
+                  "bottleneck": "sparse_signals",
+                  "drawdown": -1.0139,
+                  "pf": 0.0,
+                  "return_pct": -1.0139,
+                  "stage": "test",
+                  "trade_density_per_100_bars": 0.8,
+                  "trades": 2,
+                  "win_rate": 0.0
+                },
+                "metrics": {
+                  "avg_rr_realised": 0.0,
+                  "final_equity": 9898.61,
+                  "htf_timeframe": "1d",
+                  "ltf_timeframe": "4h",
+                  "max_drawdown_pct": -1.0139,
+                  "profit_factor": 0.0,
+                  "return_pct": -1.0139,
+                  "symbol": "BTC/USDT",
+                  "trades": 2,
+                  "win_rate": 0.0
+                }
+              },
+              "train": {
+                "diagnostics": {
+                  "bars_seen": 250,
+                  "bottleneck": "sparse_signals",
+                  "drawdown": -1.2422,
+                  "pf": 0.5975,
+                  "return_pct": -0.4435,
+                  "stage": "train",
+                  "trade_density_per_100_bars": 1.6,
+                  "trades": 4,
+                  "win_rate": 0.5
+                },
+                "metrics": {
+                  "avg_rr_realised": 0.597,
+                  "final_equity": 9955.65,
+                  "htf_timeframe": "1d",
+                  "ltf_timeframe": "4h",
+                  "max_drawdown_pct": -1.2422,
+                  "profit_factor": 0.5975,
+                  "return_pct": -0.4435,
+                  "symbol": "BTC/USDT",
+                  "trades": 4,
+                  "win_rate": 0.5
+                }
+              },
+              "val": {
+                "diagnostics": {
+                  "bars_seen": 250,
+                  "bottleneck": "sparse_signals",
+                  "drawdown": -1.0139,
+                  "pf": 0.0,
+                  "return_pct": -1.0139,
+                  "stage": "val",
+                  "trade_density_per_100_bars": 0.8,
+                  "trades": 2,
+                  "win_rate": 0.0
+                },
+                "metrics": {
+                  "avg_rr_realised": 0.0,
+                  "final_equity": 9898.61,
+                  "htf_timeframe": "1d",
+                  "ltf_timeframe": "4h",
+                  "max_drawdown_pct": -1.0139,
+                  "profit_factor": 0.0,
+                  "return_pct": -1.0139,
+                  "symbol": "BTC/USDT",
+                  "trades": 2,
+                  "win_rate": 0.0
+                }
+              }
+            }
+          ],
+          "passed": false,
+          "robustness": 0.12141944444444445,
+          "score": 0.12141944444444445,
+          "spread": 0.0
+        },
+        "wf_score": 0.12141944444444445
+      },
+      "notes": "",
+      "parameters": {
+        "allow_shorts": true,
+        "entry_mode": "breakout",
+        "min_adx": 18.0,
+        "min_atr_rank": 0.29999999999999993,
+        "min_bb_rank": 0.22,
+        "rsi_long": 47.0,
+        "rsi_short": 40.0,
+        "use_breakout_filter": true,
+        "use_htf_filter": true,
+        "use_reclaim_filter": true,
+        "use_structure_filter": true,
+        "use_trend_filter": true,
+        "use_volume_filter": true
+      },
+      "parent_strategy_id": "BTC_USDT_4h_1777454741575_2439",
+      "regime_profile": "breakout",
+      "robustness_score": 0.12141944444444445,
+      "source": "evolution",
+      "status": "candidate",
+      "tags": [
+        "btc/usdt",
+        "4h",
+        "evo",
+        "seed",
+        "mean_reversion",
+        "BTC/USDT",
+        "breakout",
+        "structural",
+        "exploit",
+        "signal_expansion"
+      ],
+      "updated_at": "2026-04-29T09:36:20.194805+00:00",
+      "validated_at": null,
+      "version": 1
+    },
+    "BTC_USDT_4h_1777455383017_8330": {
+      "active": false,
+      "base_strategy": "BTC_USDT_4h_1777454741575_2439",
+      "created_at": "2026-04-29T09:36:23.038454+00:00",
+      "logic_hash": "86191120690faa8d",
+      "metrics": {
+        "parent_score": 0.15177430555555557,
+        "wf": {
+          "diagnostics": {
+            "bottlenecks": [
+              [
+                "sparse_signals",
+                3
+              ]
+            ],
+            "mean_trade_density": 1.0667,
+            "zero_trade_folds": 0
+          },
+          "folds": [
+            {
+              "test": {
+                "diagnostics": {
+                  "bars_seen": 250,
+                  "bottleneck": "sparse_signals",
+                  "drawdown": -1.0139,
+                  "pf": 0.0,
+                  "return_pct": -1.0139,
+                  "stage": "test",
+                  "trade_density_per_100_bars": 0.8,
+                  "trades": 2,
+                  "win_rate": 0.0
+                },
+                "metrics": {
+                  "avg_rr_realised": 0.0,
+                  "final_equity": 9898.61,
+                  "htf_timeframe": "1d",
+                  "ltf_timeframe": "4h",
+                  "max_drawdown_pct": -1.0139,
+                  "profit_factor": 0.0,
+                  "return_pct": -1.0139,
+                  "symbol": "BTC/USDT",
+                  "trades": 2,
+                  "win_rate": 0.0
+                }
+              },
+              "train": {
+                "diagnostics": {
+                  "bars_seen": 250,
+                  "bottleneck": "sparse_signals",
+                  "drawdown": -1.2422,
+                  "pf": 0.5975,
+                  "return_pct": -0.4435,
+                  "stage": "train",
+                  "trade_density_per_100_bars": 1.6,
+                  "trades": 4,
+                  "win_rate": 0.5
+                },
+                "metrics": {
+                  "avg_rr_realised": 0.597,
+                  "final_equity": 9955.65,
+                  "htf_timeframe": "1d",
+                  "ltf_timeframe": "4h",
+                  "max_drawdown_pct": -1.2422,
+                  "profit_factor": 0.5975,
+                  "return_pct": -0.4435,
+                  "symbol": "BTC/USDT",
+                  "trades": 4,
+                  "win_rate": 0.5
+                }
+              },
+              "val": {
+                "diagnostics": {
+                  "bars_seen": 250,
+                  "bottleneck": "sparse_signals",
+                  "drawdown": -1.0139,
+                  "pf": 0.0,
+                  "return_pct": -1.0139,
+                  "stage": "val",
+                  "trade_density_per_100_bars": 0.8,
+                  "trades": 2,
+                  "win_rate": 0.0
+                },
+                "metrics": {
+                  "avg_rr_realised": 0.0,
+                  "final_equity": 9898.61,
+                  "htf_timeframe": "1d",
+                  "ltf_timeframe": "4h",
+                  "max_drawdown_pct": -1.0139,
+                  "profit_factor": 0.0,
+                  "return_pct": -1.0139,
+                  "symbol": "BTC/USDT",
+                  "trades": 2,
+                  "win_rate": 0.0
+                }
+              }
+            }
+          ],
+          "passed": false,
+          "robustness": 0.12141944444444445,
+          "score": 0.12141944444444445,
+          "spread": 0.0
+        },
+        "wf_score": 0.12141944444444445
+      },
+      "notes": "",
+      "parameters": {
+        "allow_shorts": true,
+        "entry_mode": "trend",
+        "min_adx": 24.0,
+        "min_atr_rank": 0.33999999999999997,
+        "min_bb_rank": 0.36,
+        "rsi_long": 52.0,
+        "rsi_short": 40.0,
+        "use_breakout_filter": false,
+        "use_htf_filter": true,
+        "use_reclaim_filter": true,
+        "use_structure_filter": true,
+        "use_trend_filter": true,
+        "use_volume_filter": true
+      },
+      "parent_strategy_id": "BTC_USDT_4h_1777454741575_2439",
+      "regime_profile": "trend",
+      "robustness_score": 0.12141944444444445,
+      "source": "evolution",
+      "status": "candidate",
+      "tags": [
+        "btc/usdt",
+        "4h",
+        "evo",
+        "seed",
+        "mean_reversion",
+        "BTC/USDT",
+        "breakout",
+        "structural",
+        "trend",
+        "cross_regime",
+        "signal_expansion"
+      ],
+      "updated_at": "2026-04-29T09:36:23.038454+00:00",
+      "validated_at": null,
+      "version": 1
+    },
+    "BTC_USDT_4h_1777455385856_6095": {
+      "active": false,
+      "base_strategy": "BTC_USDT_4h_1777454741575_2439",
+      "created_at": "2026-04-29T09:36:25.875545+00:00",
+      "logic_hash": "e807dae928f633f6",
+      "metrics": {
+        "parent_score": 0.15177430555555557,
+        "wf": {
+          "diagnostics": {
+            "bottlenecks": [
+              [
+                "sparse_signals",
+                3
+              ]
+            ],
+            "mean_trade_density": 1.0667,
+            "zero_trade_folds": 0
+          },
+          "folds": [
+            {
+              "test": {
+                "diagnostics": {
+                  "bars_seen": 250,
+                  "bottleneck": "sparse_signals",
+                  "drawdown": -1.0139,
+                  "pf": 0.0,
+                  "return_pct": -1.0139,
+                  "stage": "test",
+                  "trade_density_per_100_bars": 0.8,
+                  "trades": 2,
+                  "win_rate": 0.0
+                },
+                "metrics": {
+                  "avg_rr_realised": 0.0,
+                  "final_equity": 9898.61,
+                  "htf_timeframe": "1d",
+                  "ltf_timeframe": "4h",
+                  "max_drawdown_pct": -1.0139,
+                  "profit_factor": 0.0,
+                  "return_pct": -1.0139,
+                  "symbol": "BTC/USDT",
+                  "trades": 2,
+                  "win_rate": 0.0
+                }
+              },
+              "train": {
+                "diagnostics": {
+                  "bars_seen": 250,
+                  "bottleneck": "sparse_signals",
+                  "drawdown": -1.2422,
+                  "pf": 0.5975,
+                  "return_pct": -0.4435,
+                  "stage": "train",
+                  "trade_density_per_100_bars": 1.6,
+                  "trades": 4,
+                  "win_rate": 0.5
+                },
+                "metrics": {
+                  "avg_rr_realised": 0.597,
+                  "final_equity": 9955.65,
+                  "htf_timeframe": "1d",
+                  "ltf_timeframe": "4h",
+                  "max_drawdown_pct": -1.2422,
+                  "profit_factor": 0.5975,
+                  "return_pct": -0.4435,
+                  "symbol": "BTC/USDT",
+                  "trades": 4,
+                  "win_rate": 0.5
+                }
+              },
+              "val": {
+                "diagnostics": {
+                  "bars_seen": 250,
+                  "bottleneck": "sparse_signals",
+                  "drawdown": -1.0139,
+                  "pf": 0.0,
+                  "return_pct": -1.0139,
+                  "stage": "val",
+                  "trade_density_per_100_bars": 0.8,
+                  "trades": 2,
+                  "win_rate": 0.0
+                },
+                "metrics": {
+                  "avg_rr_realised": 0.0,
+                  "final_equity": 9898.61,
+                  "htf_timeframe": "1d",
+                  "ltf_timeframe": "4h",
+                  "max_drawdown_pct": -1.0139,
+                  "profit_factor": 0.0,
+                  "return_pct": -1.0139,
+                  "symbol": "BTC/USDT",
+                  "trades": 2,
+                  "win_rate": 0.0
+                }
+              }
+            }
+          ],
+          "passed": false,
+          "robustness": 0.12141944444444445,
+          "score": 0.12141944444444445,
+          "spread": 0.0
+        },
+        "wf_score": 0.12141944444444445
+      },
+      "notes": "",
+      "parameters": {
+        "allow_shorts": true,
+        "entry_mode": "trend",
+        "min_adx": 17.0,
+        "min_atr_rank": 0.33999999999999997,
+        "min_bb_rank": 0.24000000000000002,
+        "rsi_long": 56.0,
+        "rsi_short": 44.0,
+        "use_breakout_filter": false,
+        "use_htf_filter": true,
+        "use_reclaim_filter": true,
+        "use_structure_filter": true,
+        "use_trend_filter": true,
+        "use_volume_filter": true
+      },
+      "parent_strategy_id": "BTC_USDT_4h_1777454741575_2439",
+      "regime_profile": "trend",
+      "robustness_score": 0.12141944444444445,
+      "source": "evolution",
+      "status": "candidate",
+      "tags": [
+        "btc/usdt",
+        "4h",
+        "evo",
+        "seed",
+        "mean_reversion",
+        "BTC/USDT",
+        "breakout",
+        "structural",
+        "trend",
+        "signal_expansion"
+      ],
+      "updated_at": "2026-04-29T09:36:25.875545+00:00",
+      "validated_at": null,
+      "version": 1
+    },
+    "BTC_USDT_4h_1777455388641_6215": {
+      "active": false,
+      "base_strategy": "BTC_USDT_4h_1777454739705_8296",
+      "created_at": "2026-04-29T09:36:28.660521+00:00",
+      "logic_hash": "a04a9cb75b1f9fa6",
+      "metrics": {
+        "parent_score": 0.15177430555555557,
+        "wf": {
+          "diagnostics": {
+            "bottlenecks": [
+              [
+                "sparse_signals",
+                3
+              ]
+            ],
+            "mean_trade_density": 1.0667,
+            "zero_trade_folds": 0
+          },
+          "folds": [
+            {
+              "test": {
+                "diagnostics": {
+                  "bars_seen": 250,
+                  "bottleneck": "sparse_signals",
+                  "drawdown": -1.0139,
+                  "pf": 0.0,
+                  "return_pct": -1.0139,
+                  "stage": "test",
+                  "trade_density_per_100_bars": 0.8,
+                  "trades": 2,
+                  "win_rate": 0.0
+                },
+                "metrics": {
+                  "avg_rr_realised": 0.0,
+                  "final_equity": 9898.61,
+                  "htf_timeframe": "1d",
+                  "ltf_timeframe": "4h",
+                  "max_drawdown_pct": -1.0139,
+                  "profit_factor": 0.0,
+                  "return_pct": -1.0139,
+                  "symbol": "BTC/USDT",
+                  "trades": 2,
+                  "win_rate": 0.0
+                }
+              },
+              "train": {
+                "diagnostics": {
+                  "bars_seen": 250,
+                  "bottleneck": "sparse_signals",
+                  "drawdown": -1.2422,
+                  "pf": 0.5975,
+                  "return_pct": -0.4435,
+                  "stage": "train",
+                  "trade_density_per_100_bars": 1.6,
+                  "trades": 4,
+                  "win_rate": 0.5
+                },
+                "metrics": {
+                  "avg_rr_realised": 0.597,
+                  "final_equity": 9955.65,
+                  "htf_timeframe": "1d",
+                  "ltf_timeframe": "4h",
+                  "max_drawdown_pct": -1.2422,
+                  "profit_factor": 0.5975,
+                  "return_pct": -0.4435,
+                  "symbol": "BTC/USDT",
+                  "trades": 4,
+                  "win_rate": 0.5
+                }
+              },
+              "val": {
+                "diagnostics": {
+                  "bars_seen": 250,
+                  "bottleneck": "sparse_signals",
+                  "drawdown": -1.0139,
+                  "pf": 0.0,
+                  "return_pct": -1.0139,
+                  "stage": "val",
+                  "trade_density_per_100_bars": 0.8,
+                  "trades": 2,
+                  "win_rate": 0.0
+                },
+                "metrics": {
+                  "avg_rr_realised": 0.0,
+                  "final_equity": 9898.61,
+                  "htf_timeframe": "1d",
+                  "ltf_timeframe": "4h",
+                  "max_drawdown_pct": -1.0139,
+                  "profit_factor": 0.0,
+                  "return_pct": -1.0139,
+                  "symbol": "BTC/USDT",
+                  "trades": 2,
+                  "win_rate": 0.0
+                }
+              }
+            }
+          ],
+          "passed": false,
+          "robustness": 0.12141944444444445,
+          "score": 0.12141944444444445,
+          "spread": 0.0
+        },
+        "wf_score": 0.12141944444444445
+      },
+      "notes": "",
+      "parameters": {
+        "allow_shorts": true,
+        "entry_mode": "trend",
+        "min_adx": 17.0,
+        "min_atr_rank": 0.20000000000000004,
+        "min_bb_rank": 0.32999999999999996,
+        "rsi_long": 50.0,
+        "rsi_short": 44.0,
+        "use_breakout_filter": false,
+        "use_htf_filter": true,
+        "use_reclaim_filter": true,
+        "use_structure_filter": true,
+        "use_trend_filter": true,
+        "use_volume_filter": true
+      },
+      "parent_strategy_id": "BTC_USDT_4h_1777454739705_8296",
+      "regime_profile": "trend",
+      "robustness_score": 0.12141944444444445,
+      "source": "evolution",
+      "status": "candidate",
+      "tags": [
+        "btc/usdt",
+        "4h",
+        "evo",
+        "seed",
+        "mean_reversion",
+        "BTC/USDT",
+        "trend",
+        "cross_regime",
+        "exploit",
+        "signal_expansion"
+      ],
+      "updated_at": "2026-04-29T09:36:28.660521+00:00",
+      "validated_at": null,
+      "version": 1
+    },
+    "BTC_USDT_4h_1777455391524_4702": {
+      "active": false,
+      "base_strategy": "BTC_USDT_4h_1777454739705_8296",
+      "created_at": "2026-04-29T09:36:31.540994+00:00",
+      "logic_hash": "73aa0ee68b0354ab",
+      "metrics": {
+        "parent_score": 0.15177430555555557,
+        "wf": {
+          "diagnostics": {
+            "bottlenecks": [
+              [
+                "sparse_signals",
+                3
+              ]
+            ],
+            "mean_trade_density": 1.0667,
+            "zero_trade_folds": 0
+          },
+          "folds": [
+            {
+              "test": {
+                "diagnostics": {
+                  "bars_seen": 250,
+                  "bottleneck": "sparse_signals",
+                  "drawdown": -1.0139,
+                  "pf": 0.0,
+                  "return_pct": -1.0139,
+                  "stage": "test",
+                  "trade_density_per_100_bars": 0.8,
+                  "trades": 2,
+                  "win_rate": 0.0
+                },
+                "metrics": {
+                  "avg_rr_realised": 0.0,
+                  "final_equity": 9898.61,
+                  "htf_timeframe": "1d",
+                  "ltf_timeframe": "4h",
+                  "max_drawdown_pct": -1.0139,
+                  "profit_factor": 0.0,
+                  "return_pct": -1.0139,
+                  "symbol": "BTC/USDT",
+                  "trades": 2,
+                  "win_rate": 0.0
+                }
+              },
+              "train": {
+                "diagnostics": {
+                  "bars_seen": 250,
+                  "bottleneck": "sparse_signals",
+                  "drawdown": -1.2422,
+                  "pf": 0.5975,
+                  "return_pct": -0.4435,
+                  "stage": "train",
+                  "trade_density_per_100_bars": 1.6,
+                  "trades": 4,
+                  "win_rate": 0.5
+                },
+                "metrics": {
+                  "avg_rr_realised": 0.597,
+                  "final_equity": 9955.65,
+                  "htf_timeframe": "1d",
+                  "ltf_timeframe": "4h",
+                  "max_drawdown_pct": -1.2422,
+                  "profit_factor": 0.5975,
+                  "return_pct": -0.4435,
+                  "symbol": "BTC/USDT",
+                  "trades": 4,
+                  "win_rate": 0.5
+                }
+              },
+              "val": {
+                "diagnostics": {
+                  "bars_seen": 250,
+                  "bottleneck": "sparse_signals",
+                  "drawdown": -1.0139,
+                  "pf": 0.0,
+                  "return_pct": -1.0139,
+                  "stage": "val",
+                  "trade_density_per_100_bars": 0.8,
+                  "trades": 2,
+                  "win_rate": 0.0
+                },
+                "metrics": {
+                  "avg_rr_realised": 0.0,
+                  "final_equity": 9898.61,
+                  "htf_timeframe": "1d",
+                  "ltf_timeframe": "4h",
+                  "max_drawdown_pct": -1.0139,
+                  "profit_factor": 0.0,
+                  "return_pct": -1.0139,
+                  "symbol": "BTC/USDT",
+                  "trades": 2,
+                  "win_rate": 0.0
+                }
+              }
+            }
+          ],
+          "passed": false,
+          "robustness": 0.12141944444444445,
+          "score": 0.12141944444444445,
+          "spread": 0.0
+        },
+        "wf_score": 0.12141944444444445
+      },
+      "notes": "",
+      "parameters": {
+        "allow_shorts": true,
+        "entry_mode": "mean_reversion",
+        "min_adx": 8.0,
+        "min_atr_rank": 0.08000000000000003,
+        "min_bb_rank": 0.05,
+        "rsi_long": 40.0,
+        "rsi_short": 49.0,
+        "use_breakout_filter": true,
+        "use_htf_filter": true,
+        "use_reclaim_filter": true,
+        "use_structure_filter": true,
+        "use_trend_filter": true,
+        "use_volume_filter": true
+      },
+      "parent_strategy_id": "BTC_USDT_4h_1777454739705_8296",
+      "regime_profile": "mean_reversion",
+      "robustness_score": 0.12141944444444445,
+      "source": "evolution",
+      "status": "candidate",
+      "tags": [
+        "btc/usdt",
+        "4h",
+        "evo",
+        "seed",
+        "mean_reversion",
+        "BTC/USDT",
+        "trend",
+        "cross_regime",
+        "signal_expansion"
+      ],
+      "updated_at": "2026-04-29T09:36:31.540994+00:00",
+      "validated_at": null,
+      "version": 1
+    },
+    "BTC_USDT_4h_1777455394459_3182": {
+      "active": false,
+      "base_strategy": "BTC_USDT_4h_1777454739705_8296",
+      "created_at": "2026-04-29T09:36:34.479295+00:00",
+      "logic_hash": "66de5b7374d4b6fd",
+      "metrics": {
+        "parent_score": 0.15177430555555557,
+        "wf": {
+          "diagnostics": {
+            "bottlenecks": [
+              [
+                "sparse_signals",
+                3
+              ]
+            ],
+            "mean_trade_density": 1.0667,
+            "zero_trade_folds": 0
+          },
+          "folds": [
+            {
+              "test": {
+                "diagnostics": {
+                  "bars_seen": 250,
+                  "bottleneck": "sparse_signals",
+                  "drawdown": -1.0139,
+                  "pf": 0.0,
+                  "return_pct": -1.0139,
+                  "stage": "test",
+                  "trade_density_per_100_bars": 0.8,
+                  "trades": 2,
+                  "win_rate": 0.0
+                },
+                "metrics": {
+                  "avg_rr_realised": 0.0,
+                  "final_equity": 9898.61,
+                  "htf_timeframe": "1d",
+                  "ltf_timeframe": "4h",
+                  "max_drawdown_pct": -1.0139,
+                  "profit_factor": 0.0,
+                  "return_pct": -1.0139,
+                  "symbol": "BTC/USDT",
+                  "trades": 2,
+                  "win_rate": 0.0
+                }
+              },
+              "train": {
+                "diagnostics": {
+                  "bars_seen": 250,
+                  "bottleneck": "sparse_signals",
+                  "drawdown": -1.2422,
+                  "pf": 0.5975,
+                  "return_pct": -0.4435,
+                  "stage": "train",
+                  "trade_density_per_100_bars": 1.6,
+                  "trades": 4,
+                  "win_rate": 0.5
+                },
+                "metrics": {
+                  "avg_rr_realised": 0.597,
+                  "final_equity": 9955.65,
+                  "htf_timeframe": "1d",
+                  "ltf_timeframe": "4h",
+                  "max_drawdown_pct": -1.2422,
+                  "profit_factor": 0.5975,
+                  "return_pct": -0.4435,
+                  "symbol": "BTC/USDT",
+                  "trades": 4,
+                  "win_rate": 0.5
+                }
+              },
+              "val": {
+                "diagnostics": {
+                  "bars_seen": 250,
+                  "bottleneck": "sparse_signals",
+                  "drawdown": -1.0139,
+                  "pf": 0.0,
+                  "return_pct": -1.0139,
+                  "stage": "val",
+                  "trade_density_per_100_bars": 0.8,
+                  "trades": 2,
+                  "win_rate": 0.0
+                },
+                "metrics": {
+                  "avg_rr_realised": 0.0,
+                  "final_equity": 9898.61,
+                  "htf_timeframe": "1d",
+                  "ltf_timeframe": "4h",
+                  "max_drawdown_pct": -1.0139,
+                  "profit_factor": 0.0,
+                  "return_pct": -1.0139,
+                  "symbol": "BTC/USDT",
+                  "trades": 2,
+                  "win_rate": 0.0
+                }
+              }
+            }
+          ],
+          "passed": false,
+          "robustness": 0.12141944444444445,
+          "score": 0.12141944444444445,
+          "spread": 0.0
+        },
+        "wf_score": 0.12141944444444445
+      },
+      "notes": "",
+      "parameters": {
+        "allow_shorts": true,
+        "entry_mode": "breakout",
+        "min_adx": 13.0,
+        "min_atr_rank": 0.05,
+        "min_bb_rank": 0.42999999999999994,
+        "rsi_long": 57.0,
+        "rsi_short": 40.0,
+        "use_breakout_filter": false,
+        "use_htf_filter": true,
+        "use_reclaim_filter": true,
+        "use_structure_filter": true,
+        "use_trend_filter": true,
+        "use_volume_filter": true
+      },
+      "parent_strategy_id": "BTC_USDT_4h_1777454739705_8296",
+      "regime_profile": "breakout",
+      "robustness_score": 0.12141944444444445,
+      "source": "evolution",
+      "status": "candidate",
+      "tags": [
+        "btc/usdt",
+        "4h",
+        "evo",
+        "seed",
+        "mean_reversion",
+        "BTC/USDT",
+        "trend",
+        "cross_regime",
+        "breakout",
+        "structural",
+        "signal_expansion"
+      ],
+      "updated_at": "2026-04-29T09:36:34.479295+00:00",
+      "validated_at": null,
+      "version": 1
+    },
+    "BTC_USDT_4h_1777455994330": {
+      "active": false,
+      "base_strategy": "BTC_USDT_4h_1777455394459_3182",
+      "created_at": "2026-04-29T09:46:34.337905+00:00",
+      "logic_hash": "c1f8909cec9e0ac3",
+      "metrics": {
+        "wf": {
+          "diagnostics": {
+            "density_gap": 1.899,
+            "mean_density": 0.601,
+            "target_density": 2.5
+          },
+          "folds": [
+            {
+              "diagnostics": {
+                "bottleneck": "sparse_signals",
+                "density": 0.601,
+                "floor_met": false,
+                "target": 2.5,
+                "trades": 2
+              },
+              "test": {
+                "avg_rr_realised": 0.0,
+                "final_equity": 9898.61,
+                "htf_timeframe": "1d",
+                "ltf_timeframe": "4h",
+                "max_drawdown_pct": -1.0139,
+                "profit_factor": 0.0,
+                "return_pct": -1.0139,
+                "symbol": "BTC/USDT",
+                "trades": 2,
+                "win_rate": 0.0
+              },
+              "train": {
+                "avg_rr_realised": 0.597,
+                "final_equity": 9955.65,
+                "htf_timeframe": "1d",
+                "ltf_timeframe": "4h",
+                "max_drawdown_pct": -1.2422,
+                "profit_factor": 0.5975,
+                "return_pct": -0.4435,
+                "symbol": "BTC/USDT",
+                "trades": 4,
+                "win_rate": 0.5
+              },
+              "val": {
+                "avg_rr_realised": 0.0,
+                "final_equity": 9898.61,
+                "htf_timeframe": "1d",
+                "ltf_timeframe": "4h",
+                "max_drawdown_pct": -1.0139,
+                "profit_factor": 0.0,
+                "return_pct": -1.0139,
+                "symbol": "BTC/USDT",
+                "trades": 2,
+                "win_rate": 0.0
+              }
+            },
+            {
+              "diagnostics": {
+                "bottleneck": "sparse_signals",
+                "density": 0.601,
+                "floor_met": false,
+                "target": 2.5,
+                "trades": 2
+              },
+              "test": {
+                "avg_rr_realised": 0.0,
+                "final_equity": 9898.61,
+                "htf_timeframe": "1d",
+                "ltf_timeframe": "4h",
+                "max_drawdown_pct": -1.0139,
+                "profit_factor": 0.0,
+                "return_pct": -1.0139,
+                "symbol": "BTC/USDT",
+                "trades": 2,
+                "win_rate": 0.0
+              },
+              "train": {
+                "avg_rr_realised": 0.597,
+                "final_equity": 9955.65,
+                "htf_timeframe": "1d",
+                "ltf_timeframe": "4h",
+                "max_drawdown_pct": -1.2422,
+                "profit_factor": 0.5975,
+                "return_pct": -0.4435,
+                "symbol": "BTC/USDT",
+                "trades": 4,
+                "win_rate": 0.5
+              },
+              "val": {
+                "avg_rr_realised": 0.0,
+                "final_equity": 9898.61,
+                "htf_timeframe": "1d",
+                "ltf_timeframe": "4h",
+                "max_drawdown_pct": -1.0139,
+                "profit_factor": 0.0,
+                "return_pct": -1.0139,
+                "symbol": "BTC/USDT",
+                "trades": 2,
+                "win_rate": 0.0
+              }
+            }
+          ],
+          "passed": false,
+          "score": 0.194861,
+          "spread": 0.0
+        }
+      },
+      "notes": "",
+      "parameters": {
+        "allow_shorts": true,
+        "entry_mode": "breakout",
+        "min_adx": 12.0,
+        "min_atr_rank": 0.03,
+        "min_bb_rank": 0.37999999999999995,
+        "rsi_long": 57.0,
+        "rsi_short": 40.0,
+        "use_breakout_filter": false,
+        "use_htf_filter": true,
+        "use_reclaim_filter": false,
+        "use_structure_filter": false,
+        "use_trend_filter": true,
+        "use_volume_filter": false
+      },
+      "parent_strategy_id": "BTC_USDT_4h_1777455394459_3182",
+      "regime_profile": "auto",
+      "robustness_score": 0.194861,
+      "source": "evolution",
+      "status": "candidate",
+      "tags": [
+        "BTC/USDT",
+        "4h",
+        "evo"
+      ],
+      "updated_at": "2026-04-29T09:46:34.337905+00:00",
+      "validated_at": null,
+      "version": 1
+    },
+    "BTC_USDT_4h_1777455999374": {
+      "active": false,
+      "base_strategy": "BTC_USDT_4h_1777455391524_4702",
+      "created_at": "2026-04-29T09:46:39.467214+00:00",
+      "logic_hash": "bfdf348265744614",
+      "metrics": {
+        "wf": {
+          "diagnostics": {
+            "density_gap": 1.899,
+            "mean_density": 0.601,
+            "target_density": 2.5
+          },
+          "folds": [
+            {
+              "diagnostics": {
+                "bottleneck": "sparse_signals",
+                "density": 0.601,
+                "floor_met": false,
+                "target": 2.5,
+                "trades": 2
+              },
+              "test": {
+                "avg_rr_realised": 0.0,
+                "final_equity": 9898.61,
+                "htf_timeframe": "1d",
+                "ltf_timeframe": "4h",
+                "max_drawdown_pct": -1.0139,
+                "profit_factor": 0.0,
+                "return_pct": -1.0139,
+                "symbol": "BTC/USDT",
+                "trades": 2,
+                "win_rate": 0.0
+              },
+              "train": {
+                "avg_rr_realised": 0.597,
+                "final_equity": 9955.65,
+                "htf_timeframe": "1d",
+                "ltf_timeframe": "4h",
+                "max_drawdown_pct": -1.2422,
+                "profit_factor": 0.5975,
+                "return_pct": -0.4435,
+                "symbol": "BTC/USDT",
+                "trades": 4,
+                "win_rate": 0.5
+              },
+              "val": {
+                "avg_rr_realised": 0.0,
+                "final_equity": 9898.61,
+                "htf_timeframe": "1d",
+                "ltf_timeframe": "4h",
+                "max_drawdown_pct": -1.0139,
+                "profit_factor": 0.0,
+                "return_pct": -1.0139,
+                "symbol": "BTC/USDT",
+                "trades": 2,
+                "win_rate": 0.0
+              }
+            },
+            {
+              "diagnostics": {
+                "bottleneck": "sparse_signals",
+                "density": 0.601,
+                "floor_met": false,
+                "target": 2.5,
+                "trades": 2
+              },
+              "test": {
+                "avg_rr_realised": 0.0,
+                "final_equity": 9898.61,
+                "htf_timeframe": "1d",
+                "ltf_timeframe": "4h",
+                "max_drawdown_pct": -1.0139,
+                "profit_factor": 0.0,
+                "return_pct": -1.0139,
+                "symbol": "BTC/USDT",
+                "trades": 2,
+                "win_rate": 0.0
+              },
+              "train": {
+                "avg_rr_realised": 0.597,
+                "final_equity": 9955.65,
+                "htf_timeframe": "1d",
+                "ltf_timeframe": "4h",
+                "max_drawdown_pct": -1.2422,
+                "profit_factor": 0.5975,
+                "return_pct": -0.4435,
+                "symbol": "BTC/USDT",
+                "trades": 4,
+                "win_rate": 0.5
+              },
+              "val": {
+                "avg_rr_realised": 0.0,
+                "final_equity": 9898.61,
+                "htf_timeframe": "1d",
+                "ltf_timeframe": "4h",
+                "max_drawdown_pct": -1.0139,
+                "profit_factor": 0.0,
+                "return_pct": -1.0139,
+                "symbol": "BTC/USDT",
+                "trades": 2,
+                "win_rate": 0.0
+              }
+            }
+          ],
+          "passed": false,
+          "score": 0.194861,
+          "spread": 0.0
+        }
+      },
+      "notes": "",
+      "parameters": {
+        "allow_shorts": true,
+        "entry_mode": "mean_reversion",
+        "min_adx": 6,
+        "min_atr_rank": 0.030000000000000027,
+        "min_bb_rank": 0.03,
+        "rsi_long": 40.0,
+        "rsi_short": 49.0,
+        "use_breakout_filter": true,
+        "use_htf_filter": true,
+        "use_reclaim_filter": false,
+        "use_structure_filter": false,
+        "use_trend_filter": true,
+        "use_volume_filter": false
+      },
+      "parent_strategy_id": "BTC_USDT_4h_1777455391524_4702",
+      "regime_profile": "auto",
+      "robustness_score": 0.194861,
+      "source": "evolution",
+      "status": "candidate",
+      "tags": [
+        "BTC/USDT",
+        "4h",
+        "evo"
+      ],
+      "updated_at": "2026-04-29T09:46:39.467214+00:00",
+      "validated_at": null,
+      "version": 1
+    },
+    "BTC_USDT_4h_1777456004777": {
+      "active": false,
+      "base_strategy": "BTC_USDT_4h_1777455388641_6215",
+      "created_at": "2026-04-29T09:46:44.799963+00:00",
+      "logic_hash": "21b37483bb74aee2",
+      "metrics": {
+        "wf": {
+          "diagnostics": {
+            "density_gap": 1.899,
+            "mean_density": 0.601,
+            "target_density": 2.5
+          },
+          "folds": [
+            {
+              "diagnostics": {
+                "bottleneck": "sparse_signals",
+                "density": 0.601,
+                "floor_met": false,
+                "target": 2.5,
+                "trades": 2
+              },
+              "test": {
+                "avg_rr_realised": 0.0,
+                "final_equity": 9898.61,
+                "htf_timeframe": "1d",
+                "ltf_timeframe": "4h",
+                "max_drawdown_pct": -1.0139,
+                "profit_factor": 0.0,
+                "return_pct": -1.0139,
+                "symbol": "BTC/USDT",
+                "trades": 2,
+                "win_rate": 0.0
+              },
+              "train": {
+                "avg_rr_realised": 0.597,
+                "final_equity": 9955.65,
+                "htf_timeframe": "1d",
+                "ltf_timeframe": "4h",
+                "max_drawdown_pct": -1.2422,
+                "profit_factor": 0.5975,
+                "return_pct": -0.4435,
+                "symbol": "BTC/USDT",
+                "trades": 4,
+                "win_rate": 0.5
+              },
+              "val": {
+                "avg_rr_realised": 0.0,
+                "final_equity": 9898.61,
+                "htf_timeframe": "1d",
+                "ltf_timeframe": "4h",
+                "max_drawdown_pct": -1.0139,
+                "profit_factor": 0.0,
+                "return_pct": -1.0139,
+                "symbol": "BTC/USDT",
+                "trades": 2,
+                "win_rate": 0.0
+              }
+            },
+            {
+              "diagnostics": {
+                "bottleneck": "sparse_signals",
+                "density": 0.601,
+                "floor_met": false,
+                "target": 2.5,
+                "trades": 2
+              },
+              "test": {
+                "avg_rr_realised": 0.0,
+                "final_equity": 9898.61,
+                "htf_timeframe": "1d",
+                "ltf_timeframe": "4h",
+                "max_drawdown_pct": -1.0139,
+                "profit_factor": 0.0,
+                "return_pct": -1.0139,
+                "symbol": "BTC/USDT",
+                "trades": 2,
+                "win_rate": 0.0
+              },
+              "train": {
+                "avg_rr_realised": 0.597,
+                "final_equity": 9955.65,
+                "htf_timeframe": "1d",
+                "ltf_timeframe": "4h",
+                "max_drawdown_pct": -1.2422,
+                "profit_factor": 0.5975,
+                "return_pct": -0.4435,
+                "symbol": "BTC/USDT",
+                "trades": 4,
+                "win_rate": 0.5
+              },
+              "val": {
+                "avg_rr_realised": 0.0,
+                "final_equity": 9898.61,
+                "htf_timeframe": "1d",
+                "ltf_timeframe": "4h",
+                "max_drawdown_pct": -1.0139,
+                "profit_factor": 0.0,
+                "return_pct": -1.0139,
+                "symbol": "BTC/USDT",
+                "trades": 2,
+                "win_rate": 0.0
+              }
+            }
+          ],
+          "passed": false,
+          "score": 0.194861,
+          "spread": 0.0
+        }
+      },
+      "notes": "",
+      "parameters": {
+        "allow_shorts": true,
+        "entry_mode": "trend",
+        "min_adx": 10.0,
+        "min_atr_rank": 0.15000000000000002,
+        "min_bb_rank": 0.27999999999999997,
+        "rsi_long": 50.0,
+        "rsi_short": 44.0,
+        "use_breakout_filter": false,
+        "use_htf_filter": true,
+        "use_reclaim_filter": false,
+        "use_structure_filter": false,
+        "use_trend_filter": true,
+        "use_volume_filter": false
+      },
+      "parent_strategy_id": "BTC_USDT_4h_1777455388641_6215",
+      "regime_profile": "auto",
+      "robustness_score": 0.194861,
+      "source": "evolution",
+      "status": "candidate",
+      "tags": [
+        "BTC/USDT",
+        "4h",
+        "evo"
+      ],
+      "updated_at": "2026-04-29T09:46:44.799963+00:00",
+      "validated_at": null,
+      "version": 1
+    },
+    "BTC_USDT_4h_1777456140465": {
+      "active": false,
+      "base_strategy": "BTC_USDT_4h_1777456004777",
+      "created_at": "2026-04-29T09:49:00.472765+00:00",
+      "logic_hash": "c6fe844c683614e4",
+      "metrics": {
+        "wf": {
+          "diagnostics": {
+            "density_gap": 1.899,
+            "mean_density": 0.601,
+            "target_density": 2.5
+          },
+          "folds": [
+            {
+              "diagnostics": {
+                "bottleneck": "sparse_signals",
+                "density": 0.601,
+                "floor_met": false,
+                "target": 2.5,
+                "trades": 2
+              },
+              "test": {
+                "avg_rr_realised": 0.0,
+                "final_equity": 9898.61,
+                "htf_timeframe": "1d",
+                "ltf_timeframe": "4h",
+                "max_drawdown_pct": -1.0139,
+                "profit_factor": 0.0,
+                "return_pct": -1.0139,
+                "symbol": "BTC/USDT",
+                "trades": 2,
+                "win_rate": 0.0
+              },
+              "train": {
+                "avg_rr_realised": 0.597,
+                "final_equity": 9955.65,
+                "htf_timeframe": "1d",
+                "ltf_timeframe": "4h",
+                "max_drawdown_pct": -1.2422,
+                "profit_factor": 0.5975,
+                "return_pct": -0.4435,
+                "symbol": "BTC/USDT",
+                "trades": 4,
+                "win_rate": 0.5
+              },
+              "val": {
+                "avg_rr_realised": 0.0,
+                "final_equity": 9898.61,
+                "htf_timeframe": "1d",
+                "ltf_timeframe": "4h",
+                "max_drawdown_pct": -1.0139,
+                "profit_factor": 0.0,
+                "return_pct": -1.0139,
+                "symbol": "BTC/USDT",
+                "trades": 2,
+                "win_rate": 0.0
+              }
+            },
+            {
+              "diagnostics": {
+                "bottleneck": "sparse_signals",
+                "density": 0.601,
+                "floor_met": false,
+                "target": 2.5,
+                "trades": 2
+              },
+              "test": {
+                "avg_rr_realised": 0.0,
+                "final_equity": 9898.61,
+                "htf_timeframe": "1d",
+                "ltf_timeframe": "4h",
+                "max_drawdown_pct": -1.0139,
+                "profit_factor": 0.0,
+                "return_pct": -1.0139,
+                "symbol": "BTC/USDT",
+                "trades": 2,
+                "win_rate": 0.0
+              },
+              "train": {
+                "avg_rr_realised": 0.597,
+                "final_equity": 9955.65,
+                "htf_timeframe": "1d",
+                "ltf_timeframe": "4h",
+                "max_drawdown_pct": -1.2422,
+                "profit_factor": 0.5975,
+                "return_pct": -0.4435,
+                "symbol": "BTC/USDT",
+                "trades": 4,
+                "win_rate": 0.5
+              },
+              "val": {
+                "avg_rr_realised": 0.0,
+                "final_equity": 9898.61,
+                "htf_timeframe": "1d",
+                "ltf_timeframe": "4h",
+                "max_drawdown_pct": -1.0139,
+                "profit_factor": 0.0,
+                "return_pct": -1.0139,
+                "symbol": "BTC/USDT",
+                "trades": 2,
+                "win_rate": 0.0
+              }
+            }
+          ],
+          "passed": false,
+          "score": 0.194861,
+          "spread": 0.0
+        }
+      },
+      "notes": "",
+      "parameters": {
+        "allow_shorts": true,
+        "entry_mode": "trend",
+        "min_adx": 6,
+        "min_atr_rank": 0.10000000000000002,
+        "min_bb_rank": 0.22999999999999998,
+        "rsi_long": 50.0,
+        "rsi_short": 44.0,
+        "use_breakout_filter": false,
+        "use_htf_filter": true,
+        "use_reclaim_filter": false,
+        "use_structure_filter": false,
+        "use_trend_filter": true,
+        "use_volume_filter": false
+      },
+      "parent_strategy_id": "BTC_USDT_4h_1777456004777",
+      "regime_profile": "auto",
+      "robustness_score": 0.194861,
+      "source": "evolution",
+      "status": "candidate",
+      "tags": [
+        "BTC/USDT",
+        "4h",
+        "evo"
+      ],
+      "updated_at": "2026-04-29T09:49:00.472765+00:00",
+      "validated_at": null,
+      "version": 1
+    },
+    "BTC_USDT_4h_1777456145952": {
+      "active": false,
+      "base_strategy": "BTC_USDT_4h_1777455999374",
+      "created_at": "2026-04-29T09:49:06.051487+00:00",
+      "logic_hash": "647e9cf7c64930b1",
+      "metrics": {
+        "wf": {
+          "diagnostics": {
+            "density_gap": 1.899,
+            "mean_density": 0.601,
+            "target_density": 2.5
+          },
+          "folds": [
+            {
+              "diagnostics": {
+                "bottleneck": "sparse_signals",
+                "density": 0.601,
+                "floor_met": false,
+                "target": 2.5,
+                "trades": 2
+              },
+              "test": {
+                "avg_rr_realised": 0.0,
+                "final_equity": 9898.61,
+                "htf_timeframe": "1d",
+                "ltf_timeframe": "4h",
+                "max_drawdown_pct": -1.0139,
+                "profit_factor": 0.0,
+                "return_pct": -1.0139,
+                "symbol": "BTC/USDT",
+                "trades": 2,
+                "win_rate": 0.0
+              },
+              "train": {
+                "avg_rr_realised": 0.597,
+                "final_equity": 9955.65,
+                "htf_timeframe": "1d",
+                "ltf_timeframe": "4h",
+                "max_drawdown_pct": -1.2422,
+                "profit_factor": 0.5975,
+                "return_pct": -0.4435,
+                "symbol": "BTC/USDT",
+                "trades": 4,
+                "win_rate": 0.5
+              },
+              "val": {
+                "avg_rr_realised": 0.0,
+                "final_equity": 9898.61,
+                "htf_timeframe": "1d",
+                "ltf_timeframe": "4h",
+                "max_drawdown_pct": -1.0139,
+                "profit_factor": 0.0,
+                "return_pct": -1.0139,
+                "symbol": "BTC/USDT",
+                "trades": 2,
+                "win_rate": 0.0
+              }
+            },
+            {
+              "diagnostics": {
+                "bottleneck": "sparse_signals",
+                "density": 0.601,
+                "floor_met": false,
+                "target": 2.5,
+                "trades": 2
+              },
+              "test": {
+                "avg_rr_realised": 0.0,
+                "final_equity": 9898.61,
+                "htf_timeframe": "1d",
+                "ltf_timeframe": "4h",
+                "max_drawdown_pct": -1.0139,
+                "profit_factor": 0.0,
+                "return_pct": -1.0139,
+                "symbol": "BTC/USDT",
+                "trades": 2,
+                "win_rate": 0.0
+              },
+              "train": {
+                "avg_rr_realised": 0.597,
+                "final_equity": 9955.65,
+                "htf_timeframe": "1d",
+                "ltf_timeframe": "4h",
+                "max_drawdown_pct": -1.2422,
+                "profit_factor": 0.5975,
+                "return_pct": -0.4435,
+                "symbol": "BTC/USDT",
+                "trades": 4,
+                "win_rate": 0.5
+              },
+              "val": {
+                "avg_rr_realised": 0.0,
+                "final_equity": 9898.61,
+                "htf_timeframe": "1d",
+                "ltf_timeframe": "4h",
+                "max_drawdown_pct": -1.0139,
+                "profit_factor": 0.0,
+                "return_pct": -1.0139,
+                "symbol": "BTC/USDT",
+                "trades": 2,
+                "win_rate": 0.0
+              }
+            }
+          ],
+          "passed": false,
+          "score": 0.194861,
+          "spread": 0.0
+        }
+      },
+      "notes": "",
+      "parameters": {
+        "allow_shorts": true,
+        "entry_mode": "mean_reversion",
+        "min_adx": 6,
+        "min_atr_rank": 0.03,
+        "min_bb_rank": 0.03,
+        "rsi_long": 40.0,
+        "rsi_short": 49.0,
+        "use_breakout_filter": true,
+        "use_htf_filter": true,
+        "use_reclaim_filter": false,
+        "use_structure_filter": false,
+        "use_trend_filter": true,
+        "use_volume_filter": false
+      },
+      "parent_strategy_id": "BTC_USDT_4h_1777455999374",
+      "regime_profile": "auto",
+      "robustness_score": 0.194861,
+      "source": "evolution",
+      "status": "candidate",
+      "tags": [
+        "BTC/USDT",
+        "4h",
+        "evo"
+      ],
+      "updated_at": "2026-04-29T09:49:06.051487+00:00",
+      "validated_at": null,
+      "version": 1
+    },
+    "BTC_USDT_4h_1777456151923": {
+      "active": false,
+      "base_strategy": "BTC_USDT_4h_1777455994330",
+      "created_at": "2026-04-29T09:49:11.940503+00:00",
+      "logic_hash": "ac545e1b192050a1",
+      "metrics": {
+        "wf": {
+          "diagnostics": {
+            "density_gap": 1.899,
+            "mean_density": 0.601,
+            "target_density": 2.5
+          },
+          "folds": [
+            {
+              "diagnostics": {
+                "bottleneck": "sparse_signals",
+                "density": 0.601,
+                "floor_met": false,
+                "target": 2.5,
+                "trades": 2
+              },
+              "test": {
+                "avg_rr_realised": 0.0,
+                "final_equity": 9898.61,
+                "htf_timeframe": "1d",
+                "ltf_timeframe": "4h",
+                "max_drawdown_pct": -1.0139,
+                "profit_factor": 0.0,
+                "return_pct": -1.0139,
+                "symbol": "BTC/USDT",
+                "trades": 2,
+                "win_rate": 0.0
+              },
+              "train": {
+                "avg_rr_realised": 0.597,
+                "final_equity": 9955.65,
+                "htf_timeframe": "1d",
+                "ltf_timeframe": "4h",
+                "max_drawdown_pct": -1.2422,
+                "profit_factor": 0.5975,
+                "return_pct": -0.4435,
+                "symbol": "BTC/USDT",
+                "trades": 4,
+                "win_rate": 0.5
+              },
+              "val": {
+                "avg_rr_realised": 0.0,
+                "final_equity": 9898.61,
+                "htf_timeframe": "1d",
+                "ltf_timeframe": "4h",
+                "max_drawdown_pct": -1.0139,
+                "profit_factor": 0.0,
+                "return_pct": -1.0139,
+                "symbol": "BTC/USDT",
+                "trades": 2,
+                "win_rate": 0.0
+              }
+            },
+            {
+              "diagnostics": {
+                "bottleneck": "sparse_signals",
+                "density": 0.601,
+                "floor_met": false,
+                "target": 2.5,
+                "trades": 2
+              },
+              "test": {
+                "avg_rr_realised": 0.0,
+                "final_equity": 9898.61,
+                "htf_timeframe": "1d",
+                "ltf_timeframe": "4h",
+                "max_drawdown_pct": -1.0139,
+                "profit_factor": 0.0,
+                "return_pct": -1.0139,
+                "symbol": "BTC/USDT",
+                "trades": 2,
+                "win_rate": 0.0
+              },
+              "train": {
+                "avg_rr_realised": 0.597,
+                "final_equity": 9955.65,
+                "htf_timeframe": "1d",
+                "ltf_timeframe": "4h",
+                "max_drawdown_pct": -1.2422,
+                "profit_factor": 0.5975,
+                "return_pct": -0.4435,
+                "symbol": "BTC/USDT",
+                "trades": 4,
+                "win_rate": 0.5
+              },
+              "val": {
+                "avg_rr_realised": 0.0,
+                "final_equity": 9898.61,
+                "htf_timeframe": "1d",
+                "ltf_timeframe": "4h",
+                "max_drawdown_pct": -1.0139,
+                "profit_factor": 0.0,
+                "return_pct": -1.0139,
+                "symbol": "BTC/USDT",
+                "trades": 2,
+                "win_rate": 0.0
+              }
+            }
+          ],
+          "passed": false,
+          "score": 0.194861,
+          "spread": 0.0
+        }
+      },
+      "notes": "",
+      "parameters": {
+        "allow_shorts": true,
+        "entry_mode": "breakout",
+        "min_adx": 8.0,
+        "min_atr_rank": 0.03,
+        "min_bb_rank": 0.32999999999999996,
+        "rsi_long": 57.0,
+        "rsi_short": 40.0,
+        "use_breakout_filter": false,
+        "use_htf_filter": true,
+        "use_reclaim_filter": false,
+        "use_structure_filter": false,
+        "use_trend_filter": true,
+        "use_volume_filter": false
+      },
+      "parent_strategy_id": "BTC_USDT_4h_1777455994330",
+      "regime_profile": "auto",
+      "robustness_score": 0.194861,
+      "source": "evolution",
+      "status": "candidate",
+      "tags": [
+        "BTC/USDT",
+        "4h",
+        "evo"
+      ],
+      "updated_at": "2026-04-29T09:49:11.940503+00:00",
+      "validated_at": null,
+      "version": 1
+    },
     "evo_avax_usdt_1d_510f0aa5": {
       "active": false,
       "base_strategy": "evo_avax_usdt",
