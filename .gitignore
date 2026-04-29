@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Strategy/backtest runtime artifacts
+.backtest_cache/
+.strategy_store.json
+*.sqlite3
+*.db
+
+# Logs / temp files
+*.log
+logs/
+tmp/
+.DS_Store
