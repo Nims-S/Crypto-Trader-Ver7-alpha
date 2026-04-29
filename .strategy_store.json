@@ -15934,6 +15934,104 @@
     }
   ],
   "registry": {
+    "BTC_USDT_4h_1777452038136_8890": {
+      "active": false,
+      "base_strategy": "evo_btc_usdt_4h_5413f4f8",
+      "created_at": "2026-04-29T08:40:38.144617+00:00",
+      "logic_hash": "ffb3f8c33a4f32cc",
+      "metrics": {
+        "wf": {
+          "passed": false,
+          "robustness": 0.12141944444444445,
+          "score": 0.12141944444444445,
+          "spread": 0.0
+        },
+        "wf_score": 0.12141944444444445
+      },
+      "notes": "",
+      "parameters": {
+        "allow_shorts": false,
+        "entry_mode": "mean_reversion",
+        "min_adx": 11.0,
+        "min_atr_rank": 0.2,
+        "min_bb_rank": 0.2,
+        "rsi_long": 48.0,
+        "rsi_short": 47.0,
+        "use_breakout_filter": false,
+        "use_htf_filter": true,
+        "use_reclaim_filter": true,
+        "use_structure_filter": true,
+        "use_trend_filter": true,
+        "use_volume_filter": true
+      },
+      "parent_strategy_id": "evo_btc_usdt_4h_5413f4f8",
+      "regime_profile": "auto",
+      "robustness_score": 0.12141944444444445,
+      "source": "evolution",
+      "status": "candidate",
+      "tags": [
+        "btc/usdt",
+        "4h",
+        "evo",
+        "seed",
+        "mean_reversion",
+        "BTC/USDT",
+        "4h",
+        "evo"
+      ],
+      "updated_at": "2026-04-29T08:40:38.144617+00:00",
+      "validated_at": null,
+      "version": 1
+    },
+    "BTC_USDT_4h_1777452040197_3178": {
+      "active": false,
+      "base_strategy": "evo_btc_usdt_4h_5413f4f8",
+      "created_at": "2026-04-29T08:40:40.230378+00:00",
+      "logic_hash": "c2e55011e9516ba9",
+      "metrics": {
+        "wf": {
+          "passed": false,
+          "robustness": 0.12141944444444445,
+          "score": 0.12141944444444445,
+          "spread": 0.0
+        },
+        "wf_score": 0.12141944444444445
+      },
+      "notes": "",
+      "parameters": {
+        "allow_shorts": false,
+        "entry_mode": "mean_reversion",
+        "min_adx": 11.0,
+        "min_atr_rank": 0.2,
+        "min_bb_rank": 0.2,
+        "rsi_long": 53.0,
+        "rsi_short": 47.0,
+        "use_breakout_filter": false,
+        "use_htf_filter": true,
+        "use_reclaim_filter": true,
+        "use_structure_filter": true,
+        "use_trend_filter": true,
+        "use_volume_filter": true
+      },
+      "parent_strategy_id": "evo_btc_usdt_4h_5413f4f8",
+      "regime_profile": "auto",
+      "robustness_score": 0.12141944444444445,
+      "source": "evolution",
+      "status": "candidate",
+      "tags": [
+        "btc/usdt",
+        "4h",
+        "evo",
+        "seed",
+        "mean_reversion",
+        "BTC/USDT",
+        "4h",
+        "evo"
+      ],
+      "updated_at": "2026-04-29T08:40:40.230378+00:00",
+      "validated_at": null,
+      "version": 1
+    },
     "evo_avax_usdt_1d_510f0aa5": {
       "active": false,
       "base_strategy": "evo_avax_usdt",
