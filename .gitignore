@@ -21,5 +21,9 @@ env/
 logs/
 tmp/
 
+# Architecture promotion outputs
+architecture_catalog.json
+architecture_promotion_report.json
+
 # OS junk
 .DS_Store
