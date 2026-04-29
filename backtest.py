@@ -11,7 +11,6 @@ import ccxt
 import numpy as np
 import pandas as pd
 
-from evolution import promotion_status, score_metrics
 from strategy import StrategyState, compute_indicators, generate_signal
 from strategy_registry import record_experiment, upsert_strategy
 
@@ -495,6 +494,8 @@ def run_backtest(
 
 
 def _maybe_log_experiment(args, result):
+    from evolution import promotion_status, score_metrics
+
     strategy_id = args.strategy_id or f"{args.symbol.replace('/', '_').lower()}_{args.timeframe}_{'short' if args.allow_shorts else 'long'}"
     decision = score_metrics(result)
     registry_payload = {
