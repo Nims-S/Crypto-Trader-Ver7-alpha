@@ -3,7 +3,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from statistics import mean, pstdev
+from typing import Any, List
+from datetime import datetime
+import random
+
+from backtest import fetch_ohlcv_full, run_backtest
+from strategy_registry import upsert_strategy, list_strategies
 
 
 @dataclass(frozen=True)
@@ -78,3 +84,102 @@ def score_metrics(
 
 def promotion_status(decision: ScoreDecision) -> str:
     return "active" if decision.passed else "candidate"
+
+
+# ------------------ WALK-FORWARD VALIDATION ------------------
+
+
+def walk_forward_validate(symbol: str, timeframe: str, strategy_override: dict | None = None, folds: int = 2):
+    df = fetch_ohlcv_full(symbol, timeframe)
+    if df is None or df.empty or len(df) < 300:
+        return {"passed": False, "score": 0.0, "reason": "insufficient_data"}
+
+    n = len(df)
+    segment = max(120, n // (folds + 2))
+
+    scores = []
+
+    for f in range(folds):
+        train_end = segment * (f + 1)
+        val_end = train_end + segment
+        test_end = val_end + segment
+
+        if test_end >= n:
+            break
+
+        idx = df.index
+
+        train = run_backtest(symbol, timeframe, start=str(idx[0]), end=str(idx[train_end]), strategy_override=strategy_override)
+        val = run_backtest(symbol, timeframe, start=str(idx[train_end]), end=str(idx[val_end]), strategy_override=strategy_override)
+        test = run_backtest(symbol, timeframe, start=str(idx[val_end]), end=str(idx[test_end]), strategy_override=strategy_override)
+
+        s_train = score_metrics(train).score
+        s_val = score_metrics(val).score
+        s_test = score_metrics(test).score
+
+        scores.append((s_train + s_val + s_test) / 3.0)
+
+    if not scores:
+        return {"passed": False, "score": 0.0, "reason": "no_folds"}
+
+    composite = mean(scores)
+    spread = pstdev(scores) if len(scores) > 1 else 0.0
+
+    robustness = max(0.0, composite - spread)
+
+    return {
+        "passed": composite > 0.55 and spread < 0.2,
+        "score": composite,
+        "robustness": robustness,
+        "spread": spread,
+    }
+
+
+# ------------------ EVOLUTION LOOP ------------------
+
+
+def mutate_parameters(base: dict) -> dict:
+    params = dict(base or {})
+
+    # simple intelligent mutations
+    params["min_adx"] = max(10, params.get("min_adx", 20) + random.choice([-5, 0, 5]))
+    params["min_atr_rank"] = max(0.2, params.get("min_atr_rank", 0.6) + random.choice([-0.1, 0, 0.1]))
+    params["min_bb_rank"] = max(0.2, params.get("min_bb_rank", 0.6) + random.choice([-0.1, 0, 0.1]))
+    params["rsi_long"] = min(70, max(40, params.get("rsi_long", 55) + random.choice([-5, 0, 5])))
+
+    return params
+
+
+def evolve_once(symbol: str, timeframe: str, top_k: int = 3):
+    parents = list_strategies(active_only=True)[:top_k]
+
+    results = []
+
+    for p in parents:
+        base_params = p.get("parameters") or {}
+
+        for _ in range(2):
+            child_params = mutate_parameters(base_params)
+
+            wf = walk_forward_validate(symbol, timeframe, {"parameters": child_params})
+
+            strategy_id = f"{symbol.replace('/', '_')}_{timeframe}_{datetime.utcnow().timestamp()}"
+
+            upsert_strategy(
+                strategy_id,
+                base_strategy=p.get("strategy_id"),
+                parameters=child_params,
+                metrics={"wf_score": wf.get("score")},
+                status="active" if wf.get("passed") else "candidate",
+                active=wf.get("passed"),
+                robustness_score=wf.get("robustness", 0.0),
+                regime_profile="auto",
+            )
+
+            results.append({
+                "parent": p.get("strategy_id"),
+                "child": strategy_id,
+                "wf": wf,
+            })
+
+    return results
