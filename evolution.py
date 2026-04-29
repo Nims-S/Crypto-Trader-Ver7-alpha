@@ -7,6 +7,7 @@ from datetime import datetime
 from math import isfinite
 from statistics import mean, pstdev
 from typing import Any
+from collections import Counter
 import random
 import time
 
@@ -94,6 +95,70 @@ def promotion_status(decision: ScoreDecision) -> str:
     return "active" if decision.passed else "candidate"
 
 
+# ------------------ DIAGNOSTICS ------------------
+
+
+def _summarize_backtest(metrics: dict[str, Any], *, bars_seen: int | None, stage: str) -> dict[str, Any]:
+    trades = int(metrics.get("trades", 0) or 0)
+    pf = _safe_float(metrics.get("profit_factor", 0.0))
+    wr = _safe_float(metrics.get("win_rate", 0.0))
+    dd = _safe_float(metrics.get("max_drawdown_pct", 0.0))
+    ret = _safe_float(metrics.get("return_pct", 0.0))
+
+    density = None
+    if bars_seen and bars_seen > 0:
+        density = round((trades / float(bars_seen)) * 100.0, 4)
+
+    if trades == 0:
+        bottleneck = "signal_starvation"
+    elif trades < 10:
+        bottleneck = "sparse_signals"
+    elif pf < 1.10 or wr < 0.45:
+        bottleneck = "weak_edge"
+    elif dd <= -15.0:
+        bottleneck = "risk_instability"
+    elif abs(ret) < 0.5 and trades > 0:
+        bottleneck = "flat_equity"
+    else:
+        bottleneck = "healthy"
+
+    return {
+        "stage": stage,
+        "bars_seen": bars_seen,
+        "trade_density_per_100_bars": density,
+        "bottleneck": bottleneck,
+        "trades": trades,
+        "pf": round(pf, 4),
+        "win_rate": round(wr, 4),
+        "drawdown": round(dd, 4),
+        "return_pct": round(ret, 4),
+    }
+
+
+def _summarize_walk_forward(folds: list[dict[str, Any]]) -> dict[str, Any]:
+    if not folds:
+        return {"bottlenecks": [], "zero_trade_folds": 0, "mean_trade_density": 0.0}
+
+    counter = Counter()
+    zero_trade = 0
+    densities = []
+
+    for f in folds:
+        for split in ("train", "val", "test"):
+            diag = f.get(split, {}).get("diagnostics", {})
+            counter[diag.get("bottleneck", "unknown")] += 1
+            if diag.get("trades", 0) == 0:
+                zero_trade += 1
+            if diag.get("trade_density_per_100_bars") is not None:
+                densities.append(diag.get("trade_density_per_100_bars"))
+
+    return {
+        "bottlenecks": counter.most_common(),
+        "zero_trade_folds": zero_trade,
+        "mean_trade_density": round(sum(densities) / len(densities), 4) if densities else 0.0,
+    }
+
+
 # ------------------ WALK-FORWARD VALIDATION ------------------
 
 
@@ -107,6 +172,7 @@ def walk_forward_validate(symbol: str, timeframe: str, strategy_override: dict |
     n = len(df)
     segment = max(120, n // (folds + 2))
     scores = []
+    fold_reports = []
 
     for f in range(folds):
         train_end = segment * (f + 1)
@@ -117,14 +183,26 @@ def walk_forward_validate(symbol: str, timeframe: str, strategy_override: dict |
             break
 
         idx = df.index
-        train = run_backtest(symbol, timeframe, start=str(idx[0]), end=str(idx[train_end]), strategy_override=strategy_override)
-        val = run_backtest(symbol, timeframe, start=str(idx[train_end]), end=str(idx[val_end]), strategy_override=strategy_override)
-        test = run_backtest(symbol, timeframe, start=str(idx[val_end]), end=str(idx[test_end]), strategy_override=strategy_override)
 
-        s_train = score_metrics(train).score
-        s_val = score_metrics(val).score
-        s_test = score_metrics(test).score
+        train_m = run_backtest(symbol, timeframe, start=str(idx[0]), end=str(idx[train_end]), strategy_override=strategy_override)
+        val_m = run_backtest(symbol, timeframe, start=str(idx[train_end]), end=str(idx[val_end]), strategy_override=strategy_override)
+        test_m = run_backtest(symbol, timeframe, start=str(idx[val_end]), end=str(idx[test_end]), strategy_override=strategy_override)
+
+        train_diag = _summarize_backtest(train_m, bars_seen=segment, stage="train")
+        val_diag = _summarize_backtest(val_m, bars_seen=segment, stage="val")
+        test_diag = _summarize_backtest(test_m, bars_seen=segment, stage="test")
+
+        s_train = score_metrics(train_m).score
+        s_val = score_metrics(val_m).score
+        s_test = score_metrics(test_m).score
+
         scores.append((s_train + s_val + s_test) / 3.0)
+
+        fold_reports.append({
+            "train": {"metrics": train_m, "diagnostics": train_diag},
+            "val": {"metrics": val_m, "diagnostics": val_diag},
+            "test": {"metrics": test_m, "diagnostics": test_diag},
+        })
 
     if not scores:
         return {"passed": False, "score": 0.0, "reason": "no_folds"}
@@ -133,11 +211,15 @@ def walk_forward_validate(symbol: str, timeframe: str, strategy_override: dict |
     spread = pstdev(scores) if len(scores) > 1 else 0.0
     robustness = max(0.0, composite - spread)
 
+    wf_diag = _summarize_walk_forward(fold_reports)
+
     return {
         "passed": composite > 0.55 and spread < 0.2,
         "score": composite,
         "robustness": robustness,
         "spread": spread,
+        "diagnostics": wf_diag,
+        "folds": fold_reports,
     }
 
 
@@ -269,7 +351,6 @@ def _candidate_pool(all_strats: list[dict[str, Any]], symbol: str, timeframe: st
     pool = tagged if tagged else list(all_strats)
     pool.sort(key=_rank, reverse=True)
 
-    # Keep the highest-ranked strategy from each regime so the loop explores more than one shape.
     diversified: list[dict[str, Any]] = []
     seen_regimes: set[str] = set()
     for row in pool:
@@ -280,7 +361,6 @@ def _candidate_pool(all_strats: list[dict[str, Any]], symbol: str, timeframe: st
         if len(diversified) >= max(3, 5):
             break
 
-    # Top ranked leftovers to keep exploitation in the loop.
     for row in pool:
         if row not in diversified:
             diversified.append(row)
