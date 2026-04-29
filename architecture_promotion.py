@@ -360,18 +360,24 @@ def promote_winners(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Promote validated strategies into the architecture catalog safely")
-    parser.add_argument("--symbol", default=None)
-    parser.add_argument("--timeframe", default=None)
-    parser.add_argument("--regime", default=None)
-    parser.add_argument("--limit", type=int, default=10)
-    parser.add_argument("--apply", action="store_true", help="Actually mark strategies as architecture_promoted in the registry")
-    args = parser.parse_args()
+parser.add_argument("--symbol", default=None)
+parser.add_argument("--timeframe", default=None)
+parser.add_argument("--regime", default=None)
+parser.add_argument("--limit", type=int, default=10)
+parser.add_argument("--apply", action="store_true")
+parser.add_argument("--mode", choices=["strict", "research"], default="research")
 
-    result = promote_winners(
-        symbol=args.symbol,
-        timeframe=args.timeframe,
-        regime=args.regime,
-        limit=args.limit,
-        dry_run=not args.apply,
-    )
-    print(json.dumps(result, indent=2))
+args = parser.parse_args()
+
+policy = STRICT_POLICY if args.mode == "strict" else RESEARCH_POLICY
+
+result = promote_winners(
+    policy=policy,
+    symbol=args.symbol,
+    timeframe=args.timeframe,
+    regime=args.regime,
+    limit=args.limit,
+    dry_run=not args.apply,
+)
+
+print(json.dumps(result, indent=2))
