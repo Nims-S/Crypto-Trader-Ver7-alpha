@@ -19,7 +19,6 @@ import random
 from dataclasses import dataclass
 from typing import Any
 
-
 PARAM_BOUNDS = {
     "min_adx": (10.0, 28.0),
     "min_atr_rank": (0.05, 0.40),
@@ -29,8 +28,15 @@ PARAM_BOUNDS = {
 }
 
 ENTRY_MODE_CHOICES = ("mean_reversion", "trend_pullback", "breakout")
-BOOL_CHOICES = (False, True)
 
+EXPLORE_TOGGLE_PROBS = {
+    "use_htf_filter": 0.70,
+    "use_volume_filter": 0.60,
+    "use_reclaim_filter": 0.60,
+    "use_structure_filter": 0.60,
+    "use_trend_filter": 0.60,
+    "use_breakout_filter": 0.50,
+}
 
 @dataclass(frozen=True)
 class MutationSpec:
@@ -121,6 +127,10 @@ def _mutate_choice(rng: random.Random, current: Any, choices: tuple[Any, ...]) -
     return rng.choice(options) if options else current
 
 
+def _flip_bool(rng: random.Random, current: bool, flip_prob: float) -> bool:
+    return (not current) if rng.random() < flip_prob else current
+
+
 def mutate_parent(
     parent: dict[str, Any] | None,
     *,
@@ -129,7 +139,6 @@ def mutate_parent(
     n_children: int = 4,
     seed: int | None = None,
 ) -> list[MutationSpec]:
-    """Create a bounded set of variants derived from a registry strategy."""
     rng = random.Random(seed)
     parent = parent or {}
     base_strategy = str(parent.get("base_strategy") or parent.get("strategy_id") or "seed")
@@ -140,33 +149,27 @@ def mutate_parent(
     for idx in range(max(1, n_children)):
         params = copy.deepcopy(base_params)
 
-        # Structural exploration: rotate one of the entry archetypes per child.
         params["entry_mode"] = _mutate_choice(rng, params.get("entry_mode", "mean_reversion"), ENTRY_MODE_CHOICES)
 
-        # Toggle structural filters in a constrained way.
-        if rng.random() < 0.55:
-            params["use_htf_filter"] = not bool(params.get("use_htf_filter", True)) if rng.random() < 0.5 else bool(params.get("use_htf_filter", True))
-        if rng.random() < 0.45:
-            params["use_volume_filter"] = not bool(params.get("use_volume_filter", True)) if rng.random() < 0.5 else bool(params.get("use_volume_filter", True))
-        if rng.random() < 0.35:
-            params["use_reclaim_filter"] = not bool(params.get("use_reclaim_filter", True)) if rng.random() < 0.5 else bool(params.get("use_reclaim_filter", True))
-        if rng.random() < 0.35:
-            params["use_structure_filter"] = not bool(params.get("use_structure_filter", True)) if rng.random() < 0.5 else bool(params.get("use_structure_filter", True))
-        if rng.random() < 0.35:
-            params["use_trend_filter"] = not bool(params.get("use_trend_filter", True)) if rng.random() < 0.5 else bool(params.get("use_trend_filter", True))
-        if rng.random() < 0.25:
-            params["use_breakout_filter"] = not bool(params.get("use_breakout_filter", False)) if rng.random() < 0.5 else bool(params.get("use_breakout_filter", False))
+        for flag, prob in EXPLORE_TOGGLE_PROBS.items():
+            params[flag] = _flip_bool(rng, bool(params.get(flag, True)), prob)
 
-        # Entry thresholds remain bounded, but now complement the entry archetype.
-        params["min_adx"] = _clamp(params["min_adx"] + rng.uniform(-2.5, 2.5), *PARAM_BOUNDS["min_adx"])
-        params["min_atr_rank"] = _clamp(params["min_atr_rank"] + rng.uniform(-0.06, 0.06), *PARAM_BOUNDS["min_atr_rank"])
-        params["min_bb_rank"] = _clamp(params["min_bb_rank"] + rng.uniform(-0.06, 0.06), *PARAM_BOUNDS["min_bb_rank"])
-        params["rsi_long"] = _clamp(params["rsi_long"] + rng.uniform(-2.5, 2.5), *PARAM_BOUNDS["rsi_long"])
-        params["rsi_short"] = _clamp(params["rsi_short"] + rng.uniform(-2.5, 2.5), *PARAM_BOUNDS["rsi_short"])
+        if rng.random() < 0.18:
+            params["use_htf_filter"] = False
+            params["use_trend_filter"] = False
+        if rng.random() < 0.10:
+            params["use_structure_filter"] = False
+        if rng.random() < 0.10:
+            params["use_volume_filter"] = False
 
-        # Keep shorts opt-in and only occasionally mutate them on.
-        if rng.random() < 0.20:
-            params["allow_shorts"] = bool(parent.get("allow_shorts", False) or rng.random() < 0.25)
+        params["min_adx"] = _clamp(params["min_adx"] + rng.uniform(-3.5, 3.5), *PARAM_BOUNDS["min_adx"])
+        params["min_atr_rank"] = _clamp(params["min_atr_rank"] + rng.uniform(-0.08, 0.08), *PARAM_BOUNDS["min_atr_rank"])
+        params["min_bb_rank"] = _clamp(params["min_bb_rank"] + rng.uniform(-0.08, 0.08), *PARAM_BOUNDS["min_bb_rank"])
+        params["rsi_long"] = _clamp(params["rsi_long"] + rng.uniform(-3.0, 3.0), *PARAM_BOUNDS["rsi_long"])
+        params["rsi_short"] = _clamp(params["rsi_short"] + rng.uniform(-3.0, 3.0), *PARAM_BOUNDS["rsi_short"])
+
+        if rng.random() < 0.35:
+            params["allow_shorts"] = bool(parent.get("allow_shorts", False) or rng.random() < 0.45)
 
         payload = {
             "base_strategy": base_strategy,
@@ -196,7 +199,6 @@ def mutate_parent(
 
 
 def seed_strategy(symbol: str, timeframe: str, *, family: str = "seed") -> MutationSpec:
-    """Generate a baseline candidate when there is no parent to mutate."""
     params = _base_parameters(None)
     base_strategy = f"{family}_{symbol.replace('/', '_').lower()}"
     payload = {"base_strategy": base_strategy, "symbol": symbol, "timeframe": timeframe, "params": params}
