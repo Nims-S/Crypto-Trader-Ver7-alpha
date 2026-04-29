@@ -251,7 +251,7 @@ def select_promotion_candidates(
     limit: int = 10,
 ) -> list[dict[str, Any]]:
     policy = policy or PromotionPolicy()
-    rows = list_strategies(active_only=True)
+    rows = list_strategies(active_only=False)
 
     selected: list[dict[str, Any]] = []
     for row in rows:
