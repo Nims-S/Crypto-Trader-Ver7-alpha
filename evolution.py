@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from statistics import mean, pstdev
-from typing import Any, List
+from typing import Any
 from datetime import datetime
+from math import isfinite
 import random
 
-from backtest import fetch_ohlcv_full, run_backtest
 from strategy_registry import upsert_strategy, list_strategies
 
 
@@ -40,7 +40,7 @@ def _clamp(value: float, low: float, high: float) -> float:
 def score_metrics(
     metrics: dict[str, Any],
     *,
-    min_trades: int = 5,
+    min_trades: int = 20,
     min_profit_factor: float = 1.10,
     min_win_rate: float = 0.45,
     max_drawdown_pct: float = -15.0,
@@ -96,6 +96,9 @@ def promotion_status(decision: ScoreDecision) -> str:
 
 
 def walk_forward_validate(symbol: str, timeframe: str, strategy_override: dict | None = None, folds: int = 2):
+    # Lazy import breaks the circular dependency with backtest.py.
+    from backtest import fetch_ohlcv_full, run_backtest
+
     df = fetch_ohlcv_full(symbol, timeframe)
     if df is None or df.empty or len(df) < 300:
         return {"passed": False, "score": 0.0, "reason": "insufficient_data"}
@@ -130,7 +133,6 @@ def walk_forward_validate(symbol: str, timeframe: str, strategy_override: dict |
 
     composite = mean(scores)
     spread = pstdev(scores) if len(scores) > 1 else 0.0
-
     robustness = max(0.0, composite - spread)
 
     return {
@@ -147,7 +149,6 @@ def walk_forward_validate(symbol: str, timeframe: str, strategy_override: dict |
 def mutate_parameters(base: dict) -> dict:
     params = dict(base or {})
 
-    # simple intelligent mutations
     params["min_adx"] = max(10, params.get("min_adx", 20) + random.choice([-5, 0, 5]))
     params["min_atr_rank"] = max(0.2, params.get("min_atr_rank", 0.6) + random.choice([-0.1, 0, 0.1]))
     params["min_bb_rank"] = max(0.2, params.get("min_bb_rank", 0.6) + random.choice([-0.1, 0, 0.1]))
@@ -158,7 +159,6 @@ def mutate_parameters(base: dict) -> dict:
 
 def evolve_once(symbol: str, timeframe: str, top_k: int = 3):
     parents = list_strategies(active_only=True)[:top_k]
-
     results = []
 
     for p in parents:
@@ -166,9 +166,7 @@ def evolve_once(symbol: str, timeframe: str, top_k: int = 3):
 
         for _ in range(2):
             child_params = mutate_parameters(base_params)
-
             wf = walk_forward_validate(symbol, timeframe, {"parameters": child_params})
-
             strategy_id = f"{symbol.replace('/', '_')}_{timeframe}_{datetime.utcnow().timestamp()}"
 
             upsert_strategy(
