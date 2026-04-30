@@ -28,7 +28,7 @@ def enforce_min_activity(params, feedback):
     mean_test = _safe_float((feedback or {}).get("mean_test_trades", 0), 0.0)
     score_spread = _safe_float((feedback or {}).get("score_spread", 0), 0.0)
 
-    # If any split starves, loosen aggressively.
+    # Hard anti-starvation (fold-aware)
     if min(mean_train, mean_val, mean_test) < 5 or score_spread > 0.25:
         params["min_bb_rank"] = max(0.01, _safe_float(params.get("min_bb_rank", 0.1), 0.1) * 0.5)
         params["min_atr_rank"] = max(0.01, _safe_float(params.get("min_atr_rank", 0.1), 0.1) * 0.5)
@@ -42,8 +42,7 @@ def enforce_min_activity(params, feedback):
         params["rsi_long"] = max(45, _safe_float(params.get("rsi_long", 55), 55) - 5)
         params["rsi_short"] = min(55, _safe_float(params.get("rsi_short", 45), 45) + 5)
 
-    # If train is active but val/test are starving, keep HTF more open and favor
-    # entries that can survive across splits.
+    # Train ok but val/test dead → remove HTF rigidity
     if mean_train >= 5 and min(mean_val, mean_test) < 5:
         params["use_htf_filter"] = False
         if random.random() < 0.5:
@@ -64,15 +63,14 @@ def mutate_parent(parent, symbol, timeframe, n_children=4, seed=None, feedback=N
         if feedback:
             params = enforce_min_activity(params, feedback)
 
-        # diversity injection
+        # Diversity injection (critical for exploration)
         if random.random() < 0.3:
             params["use_htf_filter"] = False
 
         if random.random() < 0.3:
             params["entry_mode"] = random.choice(["breakout", "mean_reversion"])
 
-        # If the feedback indicates a large gap between folds, bias toward
-        # looser, more adaptable structures.
+        # Penalize unstable configs (high variance across folds)
         if _safe_float((feedback or {}).get("score_spread", 0), 0.0) > 0.25:
             params["use_structure_filter"] = False
             if random.random() < 0.5:
