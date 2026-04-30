@@ -310,13 +310,15 @@ def promote_winners(
     promoted: list[PromotionResult] = []
     for row in winners:
         payload = row.get("promotion_payload") or {}
-        strategy_id = row.get("strategy_id")
+
+        is_strict = _eligible(row, STRICT_POLICY)[0]
+
         promotion_result = PromotionResult(
-            strategy_id=strategy_id,
+            strategy_id=row.get("strategy_id"),
             symbol=row.get("symbol") or symbol,
             timeframe=row.get("timeframe") or timeframe,
-            status="architecture_promoted",
-            reason=payload.get("reason", "eligible"),
+            status="architecture_promoted" if is_strict else "architecture_review",
+            reason=payload.get("reason", row.get("promotion_reject_reason", "review")),
             score=_safe_float(payload.get("score", 0.0), 0.0),
             robustness_score=_safe_float(payload.get("robustness_score", 0.0), 0.0),
             trades=_safe_int(payload.get("trades", 0), 0),
