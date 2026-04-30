@@ -72,18 +72,19 @@ def _feedback_from_metrics(metrics: dict[str, Any]) -> dict[str, Any]:
     diag = metrics.get("diagnostics") or {}
 
     activity = diag.get("trade_activity") or {}
-    mean_test = 0.0
-    if isinstance(activity, dict):
-        mean_bucket = activity.get("mean") or {}
-        if isinstance(mean_bucket, dict):
-            mean_test = _safe_float(mean_bucket.get("test", 0), 0.0)
+    means = (wf.get("means") or {}) if isinstance(wf.get("means"), dict) else {}
 
     return {
         "top_fail_reasons": wf.get("reasons") or diag.get("top_fail_reasons") or {},
         "trade_activity": activity,
-        "mean_test_trades": mean_test,
-        "passed": bool(wf.get("passed", False)),
+        "mean_test_trades": _safe_float((activity.get("mean") or {}).get("test", 0), 0.0),
+        "mean_val_trades": _safe_float((activity.get("mean") or {}).get("val", 0), 0.0),
+        "mean_train_trades": _safe_float((activity.get("mean") or {}).get("train", 0), 0.0),
         "score": _safe_float(wf.get("score", 0.0), 0.0),
+        "score_spread": _safe_float(wf.get("score_spread", 0.0), 0.0),
+        "train_mean_score": _safe_float(means.get("train", 0.0), 0.0),
+        "val_mean_score": _safe_float(means.get("val", 0.0), 0.0),
+        "test_mean_score": _safe_float(means.get("test", 0.0), 0.0),
     }
 
 
