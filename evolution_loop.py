@@ -97,9 +97,27 @@ def evolve_once(symbols, timeframes, children_per_parent=4, max_bars=0, allow_sh
 
             wf_folds = build_walk_forward_folds(start, end, folds=folds, train_ratio=train_ratio, val_ratio=val_ratio, test_ratio=test_ratio)
 
+            # Anti-starvation safety: keep at least one child per symbol/timeframe.
+            candidate_rows = []
             for child in children:
-                # FIX 2 — skip overly restrictive children when parent has no activity
-                if parent_feedback.get("mean_test_trades", 0) < 3 and _too_restrictive(child.parameters):
+                is_restrictive = _too_restrictive(child.parameters)
+                should_skip = parent is not None and parent_feedback.get("mean_test_trades", 0) < 3 and is_restrictive
+                candidate_rows.append((child, should_skip, is_restrictive))
+
+            if candidate_rows and all(skip for _, skip, _ in candidate_rows):
+                # Force the least restrictive child to survive so the generation is never empty.
+                candidate_rows.sort(
+                    key=lambda item: (
+                        item[2],
+                        _safe_float(item[0].parameters.get("min_adx", 0), 0.0),
+                        _safe_float(item[0].parameters.get("min_bb_rank", 0), 0.0),
+                        _safe_float(item[0].parameters.get("min_atr_rank", 0), 0.0),
+                    )
+                )
+                candidate_rows[0] = (candidate_rows[0][0], False, candidate_rows[0][2])
+
+            for child, should_skip, _ in candidate_rows:
+                if should_skip:
                     continue
 
                 upsert_strategy(child.strategy_id, base_strategy=child.base_strategy, version=child.version, status="candidate", parameters=child.parameters, metrics={}, tags=child.tags, source=child.source, notes=child.notes, active=False)
@@ -111,8 +129,8 @@ def evolve_once(symbols, timeframes, children_per_parent=4, max_bars=0, allow_sh
 
                 fold_reports = []
                 for fold in wf_folds:
-                    st = datetime.fromisoformat(fold.start.replace("Z","+00:00"))
-                    en = datetime.fromisoformat(fold.end.replace("Z","+00:00"))
+                    st = datetime.fromisoformat(fold.start.replace("Z", "+00:00"))
+                    en = datetime.fromisoformat(fold.end.replace("Z", "+00:00"))
                     span = en - st
                     train_end = st + span * train_ratio
                     val_end = train_end + span * val_ratio
