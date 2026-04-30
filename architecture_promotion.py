@@ -188,7 +188,20 @@ def _latest_drawdown(metrics: dict[str, Any]) -> float:
         worst = _safe_float(metrics.get("max_drawdown_pct", 0.0), 0.0)
     return worst
 
-
+def _compact_summary(item: PromotionResult) -> dict[str, Any]:
+    return {
+        "strategy_id": item.strategy_id,
+        "symbol": item.symbol,
+        "timeframe": item.timeframe,
+        "status": item.status,
+        "reason": item.reason,
+        "score": round(item.score, 4),
+        "robustness_score": round(item.robustness_score, 4),
+        "trades": item.trades,
+        "profit_factor": round(item.profit_factor, 4),
+        "win_rate": round(item.win_rate, 4),
+        "max_drawdown_pct": round(item.max_drawdown_pct, 4),
+    }
 def _eligible(row: dict[str, Any], policy: PromotionPolicy) -> tuple[bool, str, dict[str, Any]]:
     metrics = row.get("metrics") or {}
     tags = [str(t) for t in (row.get("tags") or [])]
@@ -328,7 +341,7 @@ def promote_winners(
         )
         promoted.append(promotion_result)
 
-        if not dry_run:
+        if not dry_run and is_strict:
             upsert_strategy(
                 strategy_id,
                 base_strategy=row.get("base_strategy") or strategy_id,
@@ -358,6 +371,7 @@ def promote_winners(
         "dry_run": dry_run,
         "policy": asdict(policy),
         "selected": len(winners),
+        "summary": [_compact_summary(item) for item in promoted],
         "promoted": [asdict(item) for item in promoted],
     }
 
