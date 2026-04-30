@@ -1,11 +1,13 @@
 """Safe promotion pipeline for elevating winning strategies into the stable architecture layer.
 
-Two operating modes are supported:
-- strict: only validated, high-quality candidates are considered for promotion
-- research: surfaces borderline candidates for review without auto-promoting them
+This module does not mutate live trading behavior directly. Instead, it:
+1) selects only validated, active, high-quality strategies from the registry
+2) applies a stricter architecture promotion gate
+3) writes an immutable catalog snapshot for review / controlled adoption
+4) marks the promoted strategies in the registry as architecture_promoted
 
-The module writes immutable catalog/report snapshots and can optionally mark
-strategies as architecture_promoted when the strict gate is satisfied.
+The goal is to keep the architecture branch clean while still allowing proven
+strategies to be surfaced from the research branch.
 """
 
 from __future__ import annotations
@@ -38,21 +40,6 @@ class PromotionPolicy:
     max_per_symbol: int = 3
     max_total: int = 10
     allowed_regimes: tuple[str, ...] = ("trend", "mean_reversion", "breakout")
-
-
-STRICT_POLICY = PromotionPolicy()
-RESEARCH_POLICY = PromotionPolicy(
-    min_score=0.20,
-    min_robustness_score=0.05,
-    min_trades=1,
-    min_profit_factor=0.90,
-    min_win_rate=0.20,
-    max_drawdown_pct=-35.0,
-    require_active=False,
-    require_validated=False,
-    max_per_symbol=5,
-    max_total=15,
-)
 
 
 @dataclass(frozen=True)
@@ -112,15 +99,18 @@ def _load_decision(metrics: dict[str, Any]) -> dict[str, Any]:
 
 
 def _latest_metric_score(metrics: dict[str, Any]) -> float:
-    return _safe_float(_load_decision(metrics).get("score", 0.0), 0.0)
+    decision = _load_decision(metrics)
+    return _safe_float(decision.get("score", 0.0), 0.0)
 
 
 def _latest_passed(metrics: dict[str, Any]) -> bool:
-    return _safe_bool(_load_decision(metrics).get("passed", False), False)
+    decision = _load_decision(metrics)
+    return _safe_bool(decision.get("passed", False), False)
 
 
 def _latest_reason(metrics: dict[str, Any]) -> str:
-    reasons = _load_decision(metrics).get("reasons") or []
+    decision = _load_decision(metrics)
+    reasons = decision.get("reasons") or []
     if not reasons:
         return "passed"
     if isinstance(reasons, (list, tuple)):
@@ -150,9 +140,12 @@ def _latest_trades(metrics: dict[str, Any]) -> int:
     split_results = wf.get("split_results") or {}
     best = 0
     for split_name in ("train", "val", "test"):
-        for row in split_results.get(split_name) or []:
+        rows = split_results.get(split_name) or []
+        for row in rows:
             best = max(best, _safe_int(row.get("trades", 0), 0))
-    return best if best else _safe_int(metrics.get("trades", 0), 0)
+    if best == 0:
+        best = _safe_int(metrics.get("trades", 0), 0)
+    return best
 
 
 def _latest_profit_factor(metrics: dict[str, Any]) -> float:
@@ -160,9 +153,12 @@ def _latest_profit_factor(metrics: dict[str, Any]) -> float:
     split_results = wf.get("split_results") or {}
     best = 0.0
     for split_name in ("train", "val", "test"):
-        for row in split_results.get(split_name) or []:
+        rows = split_results.get(split_name) or []
+        for row in rows:
             best = max(best, _safe_float(row.get("profit_factor", 0.0), 0.0))
-    return best if best else _safe_float(metrics.get("profit_factor", 0.0), 0.0)
+    if best == 0.0:
+        best = _safe_float(metrics.get("profit_factor", 0.0), 0.0)
+    return best
 
 
 def _latest_win_rate(metrics: dict[str, Any]) -> float:
@@ -170,9 +166,12 @@ def _latest_win_rate(metrics: dict[str, Any]) -> float:
     split_results = wf.get("split_results") or {}
     best = 0.0
     for split_name in ("train", "val", "test"):
-        for row in split_results.get(split_name) or []:
+        rows = split_results.get(split_name) or []
+        for row in rows:
             best = max(best, _safe_float(row.get("win_rate", 0.0), 0.0))
-    return best if best else _safe_float(metrics.get("win_rate", 0.0), 0.0)
+    if best == 0.0:
+        best = _safe_float(metrics.get("win_rate", 0.0), 0.0)
+    return best
 
 
 def _latest_drawdown(metrics: dict[str, Any]) -> float:
@@ -180,13 +179,29 @@ def _latest_drawdown(metrics: dict[str, Any]) -> float:
     split_results = wf.get("split_results") or {}
     worst = 0.0
     for split_name in ("train", "val", "test"):
-        for row in split_results.get(split_name) or []:
+        rows = split_results.get(split_name) or []
+        for row in rows:
             dd = _safe_float(row.get("max_drawdown_pct", 0.0), 0.0)
             if dd < worst:
                 worst = dd
-    return worst if worst else _safe_float(metrics.get("max_drawdown_pct", 0.0), 0.0)
+    if worst == 0.0:
+        worst = _safe_float(metrics.get("max_drawdown_pct", 0.0), 0.0)
+    return worst
 
-
+def _compact_summary(item: PromotionResult) -> dict[str, Any]:
+    return {
+        "strategy_id": item.strategy_id,
+        "symbol": item.symbol,
+        "timeframe": item.timeframe,
+        "status": item.status,
+        "reason": item.reason,
+        "score": round(item.score, 4),
+        "robustness_score": round(item.robustness_score, 4),
+        "trades": item.trades,
+        "profit_factor": round(item.profit_factor, 4),
+        "win_rate": round(item.win_rate, 4),
+        "max_drawdown_pct": round(item.max_drawdown_pct, 4),
+    }
 def _eligible(row: dict[str, Any], policy: PromotionPolicy) -> tuple[bool, str, dict[str, Any]]:
     metrics = row.get("metrics") or {}
     tags = [str(t) for t in (row.get("tags") or [])]
@@ -219,8 +234,13 @@ def _eligible(row: dict[str, Any], policy: PromotionPolicy) -> tuple[bool, str, 
     if dd <= policy.max_drawdown_pct:
         return False, f"dd<={policy.max_drawdown_pct:.1f}", metrics
 
-    symbol = _symbol_from_tags(tags) or row.get("symbol")
-    timeframe = _timeframe_from_tags(tags) or row.get("timeframe")
+    symbol = _symbol_from_tags(tags)
+    timeframe = _timeframe_from_tags(tags)
+    if not symbol:
+        symbol = row.get("symbol")
+    if not timeframe:
+        timeframe = row.get("timeframe")
+
     payload = {
         "logic_hash": row.get("logic_hash"),
         "status": row.get("status"),
@@ -235,9 +255,18 @@ def _eligible(row: dict[str, Any], policy: PromotionPolicy) -> tuple[bool, str, 
     return True, "eligible", {**row, "symbol": symbol, "timeframe": timeframe, "promotion_payload": payload}
 
 
-def _candidate_pool(policy: PromotionPolicy, symbol: str | None, timeframe: str | None, regime: str | None) -> list[dict[str, Any]]:
+def select_promotion_candidates(
+    *,
+    policy: PromotionPolicy | None = None,
+    symbol: str | None = None,
+    timeframe: str | None = None,
+    regime: str | None = None,
+    limit: int = 10,
+) -> list[dict[str, Any]]:
+    policy = policy or PromotionPolicy()
     rows = list_strategies(active_only=False)
-    pool: list[dict[str, Any]] = []
+
+    selected: list[dict[str, Any]] = []
     for row in rows:
         tags = [str(t).lower() for t in (row.get("tags") or [])]
         if symbol and symbol.lower() not in tags and symbol.upper() != row.get("symbol"):
@@ -248,55 +277,28 @@ def _candidate_pool(policy: PromotionPolicy, symbol: str | None, timeframe: str 
             continue
         ok, reason, payload = _eligible(row, policy)
         if ok:
-            pool.append(payload)
-        elif policy is RESEARCH_POLICY:
-            # In research mode, keep near-misses for review even if they miss thresholds.
-            miss = dict(row)
-            miss["promotion_reject_reason"] = reason
-            miss["promotion_payload"] = {
-                "logic_hash": row.get("logic_hash"),
-                "status": row.get("status"),
-                "score": round(_latest_metric_score(row.get("metrics") or {}), 6),
-                "robustness_score": round(_safe_float(row.get("robustness_score", 0.0), 0.0), 6),
-                "trades": _latest_trades(row.get("metrics") or {}),
-                "profit_factor": round(_latest_profit_factor(row.get("metrics") or {}), 4),
-                "win_rate": round(_latest_win_rate(row.get("metrics") or {}), 4),
-                "max_drawdown_pct": round(_latest_drawdown(row.get("metrics") or {}), 4),
-                "reason": reason,
-                "review_only": True,
-            }
-            pool.append(miss)
-    return pool
-
-
-def select_promotion_candidates(
-    *,
-    policy: PromotionPolicy | None = None,
-    symbol: str | None = None,
-    timeframe: str | None = None,
-    regime: str | None = None,
-    limit: int = 10,
-) -> list[dict[str, Any]]:
-    policy = policy or STRICT_POLICY
-    pool = _candidate_pool(policy, symbol, timeframe, regime)
+            selected.append(payload)
+        else:
+            row = dict(row)
+            row["promotion_reject_reason"] = reason
+            selected.append(row)
 
     def _rank(row: dict[str, Any]):
         metrics = row.get("metrics") or {}
-        decision = _load_decision(metrics)
-        return (
-            _safe_float(decision.get("score", 0.0), 0.0),
-            _safe_float(row.get("robustness_score", 0.0), 0.0),
-            _safe_int(_candidate_trades(row), 0),
-            row.get("updated_at") or row.get("created_at") or "",
-        )
+        score = _latest_metric_score(metrics)
+        robustness = _safe_float(row.get("robustness_score", 0.0), 0.0)
+        updated = row.get("updated_at") or row.get("created_at") or ""
+        return (score, robustness, updated)
 
-    pool.sort(key=_rank, reverse=True)
-    return pool[: max(1, int(limit))]
+    if policy.require_validated:
+        # STRICT MODE → only eligible
+        winners = [r for r in selected if "promotion_payload" in r]
+    else:
+        # RESEARCH MODE → include ALL, even rejected
+        winners = selected
 
-
-def _candidate_trades(row: dict[str, Any]) -> int:
-    payload = row.get("promotion_payload") or {}
-    return _safe_int(payload.get("trades", 0), 0)
+    winners.sort(key=_rank, reverse=True)
+    return winners[: max(1, int(limit))]
 
 
 def _atomic_write(path: Path, payload: dict[str, Any]) -> None:
@@ -315,22 +317,21 @@ def promote_winners(
     limit: int = 10,
     dry_run: bool = True,
 ) -> dict[str, Any]:
-    policy = policy or STRICT_POLICY
-    candidates = select_promotion_candidates(policy=policy, symbol=symbol, timeframe=timeframe, regime=regime, limit=limit)
+    policy = policy or PromotionPolicy()
+    winners = select_promotion_candidates(policy=policy, symbol=symbol, timeframe=timeframe, regime=regime, limit=limit)
 
     promoted: list[PromotionResult] = []
-    for row in candidates:
+    for row in winners:
         payload = row.get("promotion_payload") or {}
-        strategy_id = row.get("strategy_id")
-        is_review_only = bool(payload.get("review_only", False))
-        is_strict_eligible = not is_review_only and _eligible(row, STRICT_POLICY)[0]
+
+        is_strict = _eligible(row, STRICT_POLICY)[0]
 
         promotion_result = PromotionResult(
-            strategy_id=strategy_id,
+            strategy_id=row.get("strategy_id"),
             symbol=row.get("symbol") or symbol,
             timeframe=row.get("timeframe") or timeframe,
-            status="architecture_promoted" if is_strict_eligible else "architecture_review",
-            reason=payload.get("reason", "eligible"),
+            status="architecture_promoted" if is_strict else "architecture_review",
+            reason=payload.get("reason", row.get("promotion_reject_reason", "review")),
             score=_safe_float(payload.get("score", 0.0), 0.0),
             robustness_score=_safe_float(payload.get("robustness_score", 0.0), 0.0),
             trades=_safe_int(payload.get("trades", 0), 0),
@@ -340,7 +341,7 @@ def promote_winners(
         )
         promoted.append(promotion_result)
 
-        if not dry_run and is_strict_eligible:
+        if not dry_run and is_strict:
             upsert_strategy(
                 strategy_id,
                 base_strategy=row.get("base_strategy") or strategy_id,
@@ -369,7 +370,8 @@ def promote_winners(
         "generated_at": _now_iso(),
         "dry_run": dry_run,
         "policy": asdict(policy),
-        "selected": len(candidates),
+        "selected": len(winners),
+        "summary": [_compact_summary(item) for item in promoted],
         "promoted": [asdict(item) for item in promoted],
     }
 
@@ -378,17 +380,38 @@ def promote_winners(
     return report
 
 
+# --- MODES ---
+STRICT_POLICY = PromotionPolicy()
+
+RESEARCH_POLICY = PromotionPolicy(
+    min_score=0.20,
+    min_robustness_score=0.05,
+    min_trades=1,
+    min_profit_factor=0.90,
+    min_win_rate=0.20,
+    max_drawdown_pct=-35.0,
+    require_active=False,
+    require_validated=False,
+    max_per_symbol=5,
+    max_total=15,
+)
+
+# --- CLI ENTRY ---
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Promote validated strategies into the architecture catalog safely")
+    parser = argparse.ArgumentParser(
+        description="Promote validated strategies into the architecture catalog safely"
+    )
     parser.add_argument("--symbol", default=None)
     parser.add_argument("--timeframe", default=None)
     parser.add_argument("--regime", default=None)
     parser.add_argument("--limit", type=int, default=10)
-    parser.add_argument("--apply", action="store_true", help="Actually mark strict-eligible strategies as architecture_promoted in the registry")
-    parser.add_argument("--mode", choices=["strict", "research"], default=os.getenv("ARCHITECTURE_PROMOTION_MODE", "research"))
+    parser.add_argument("--apply", action="store_true")
+    parser.add_argument("--mode", choices=["strict", "research"], default="research")
+
     args = parser.parse_args()
 
     policy = STRICT_POLICY if args.mode == "strict" else RESEARCH_POLICY
+
     result = promote_winners(
         policy=policy,
         symbol=args.symbol,
@@ -397,4 +420,5 @@ if __name__ == "__main__":
         limit=args.limit,
         dry_run=not args.apply,
     )
+
     print(json.dumps(result, indent=2))

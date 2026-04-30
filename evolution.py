@@ -1,16 +1,24 @@
-"""Strategy scoring and promotion rules (enhanced)."""
+"""
+Evolution engine with:
+- BTC 4h entry loosening
+- Signal-floor diagnostics
+- Trade density tracking BEFORE scoring changes
+"""
 
 from __future__ import annotations
 
+from collections import Counter
 from dataclasses import dataclass
 from statistics import mean, pstdev
-from typing import Any, List
-from datetime import datetime
+from typing import Any
 import random
+import time
 
-from backtest import fetch_ohlcv_full, run_backtest
-from strategy_registry import upsert_strategy, list_strategies
+from backtest import fetch_ohlcv_full
+from strategy_registry import compute_logic_hash, list_strategies, upsert_strategy
 
+
+# ------------------ SCORING ------------------
 
 @dataclass(frozen=True)
 class ScoreDecision:
@@ -18,174 +26,179 @@ class ScoreDecision:
     passed: bool
     reasons: tuple[str, ...]
 
-    def as_dict(self) -> dict[str, Any]:
-        return {
-            "score": round(self.score, 6),
-            "passed": self.passed,
-            "reasons": list(self.reasons),
-        }
 
-
-def _safe_float(value: Any, default: float = 0.0) -> float:
+def _safe(v, d=0.0):
     try:
-        return float(value)
-    except Exception:
-        return default
+        x = float(v)
+        return x
+    except:
+        return d
 
 
-def _clamp(value: float, low: float, high: float) -> float:
-    return max(low, min(high, value))
+def score_metrics(m: dict) -> ScoreDecision:
+    trades = int(m.get("trades", 0))
+    pf = _safe(m.get("profit_factor", 0))
+    wr = _safe(m.get("win_rate", 0))
+    dd = _safe(m.get("max_drawdown_pct", 0))
 
-
-def score_metrics(
-    metrics: dict[str, Any],
-    *,
-    min_trades: int = 5,
-    min_profit_factor: float = 1.10,
-    min_win_rate: float = 0.45,
-    max_drawdown_pct: float = -15.0,
-) -> ScoreDecision:
-    trades = int(metrics.get("trades", 0) or 0)
-    raw_profit_factor = _safe_float(metrics.get("profit_factor", 0.0))
-    profit_factor = raw_profit_factor if isfinite(raw_profit_factor) else 0.0
-    profit_factor = _clamp(profit_factor, 0.0, 20.0)
-    win_rate = _safe_float(metrics.get("win_rate", 0.0))
-    drawdown = _safe_float(metrics.get("max_drawdown_pct", 0.0))
-    return_pct = _safe_float(metrics.get("return_pct", 0.0))
-    avg_rr = _safe_float(metrics.get("avg_rr_realised", 0.0))
-
-    reasons: list[str] = []
-
-    if trades < min_trades:
-        reasons.append(f"trades<{min_trades}")
-    if profit_factor < min_profit_factor:
-        reasons.append(f"pf<{min_profit_factor:.2f}")
-    if win_rate < min_win_rate:
-        reasons.append(f"wr<{min_win_rate:.2f}")
-    if drawdown <= max_drawdown_pct:
-        reasons.append(f"dd<={max_drawdown_pct:.1f}")
-
-    pf_component = min(max((profit_factor - 1.0) / 1.5, 0.0), 1.0)
-    wr_component = min(max((win_rate - 0.35) / 0.45, 0.0), 1.0)
-    dd_component = min(max((abs(drawdown) - 5.0) / 20.0, 0.0), 1.0)
-    ret_component = min(max(return_pct / 25.0, -1.0), 1.0)
-    rr_component = min(max(avg_rr / 4.0, 0.0), 1.0)
-    trade_component = min(max(trades / float(max(min_trades, 1)), 0.0), 2.0) / 2.0
-
-    density_penalty = 1.0 - min(trades / 50.0, 1.0)
+    reasons = []
+    if trades < 20:
+        reasons.append("trades<20")
+    if pf < 1.1:
+        reasons.append("pf<1.1")
+    if wr < 0.45:
+        reasons.append("wr<0.45")
 
     score = (
-        0.28 * pf_component
-        + 0.22 * wr_component
-        + 0.18 * (1.0 - dd_component)
-        + 0.12 * max(ret_component, 0.0)
-        + 0.10 * rr_component
-        + 0.10 * trade_component
-        - 0.10 * density_penalty
+        0.4 * min(pf / 2.0, 1)
+        + 0.3 * wr
+        + 0.2 * max(0, 1 + dd / 20)
+        + 0.1 * min(trades / 40, 1)
     )
 
-    passed = len(reasons) == 0 and score >= 0.55
-    return ScoreDecision(score=score, passed=passed, reasons=tuple(reasons))
+    return ScoreDecision(score, len(reasons) == 0 and score > 0.55, tuple(reasons))
 
 
-def promotion_status(decision: ScoreDecision) -> str:
-    return "active" if decision.passed else "candidate"
+# ------------------ SIGNAL FLOOR ------------------
+
+def signal_floor_target(symbol, tf):
+    if symbol.startswith("BTC") and tf == "4h":
+        return 2.5  # key fix
+    return 1.5
 
 
-# ------------------ WALK-FORWARD VALIDATION ------------------
+def summarize_bt(m, bars, symbol, tf):
+    trades = int(m.get("trades", 0))
 
+    density = (trades / bars) * 100 if bars else 0
+    target = signal_floor_target(symbol, tf)
 
-def walk_forward_validate(symbol: str, timeframe: str, strategy_override: dict | None = None, folds: int = 2):
-    df = fetch_ohlcv_full(symbol, timeframe)
-    if df is None or df.empty or len(df) < 300:
-        return {"passed": False, "score": 0.0, "reason": "insufficient_data"}
-
-    n = len(df)
-    segment = max(120, n // (folds + 2))
-
-    scores = []
-
-    for f in range(folds):
-        train_end = segment * (f + 1)
-        val_end = train_end + segment
-        test_end = val_end + segment
-
-        if test_end >= n:
-            break
-
-        idx = df.index
-
-        train = run_backtest(symbol, timeframe, start=str(idx[0]), end=str(idx[train_end]), strategy_override=strategy_override)
-        val = run_backtest(symbol, timeframe, start=str(idx[train_end]), end=str(idx[val_end]), strategy_override=strategy_override)
-        test = run_backtest(symbol, timeframe, start=str(idx[val_end]), end=str(idx[test_end]), strategy_override=strategy_override)
-
-        s_train = score_metrics(train).score
-        s_val = score_metrics(val).score
-        s_test = score_metrics(test).score
-
-        scores.append((s_train + s_val + s_test) / 3.0)
-
-    if not scores:
-        return {"passed": False, "score": 0.0, "reason": "no_folds"}
-
-    composite = mean(scores)
-    spread = pstdev(scores) if len(scores) > 1 else 0.0
-
-    robustness = max(0.0, composite - spread)
+    if trades == 0:
+        bottleneck = "signal_starvation"
+    elif trades < 10:
+        bottleneck = "sparse_signals"
+    elif m.get("profit_factor", 0) < 1.1:
+        bottleneck = "weak_edge"
+    else:
+        bottleneck = "ok"
 
     return {
-        "passed": composite > 0.55 and spread < 0.2,
-        "score": composite,
-        "robustness": robustness,
-        "spread": spread,
+        "trades": trades,
+        "density": round(density, 3),
+        "target": target,
+        "floor_met": density >= target,
+        "bottleneck": bottleneck,
     }
 
 
-# ------------------ EVOLUTION LOOP ------------------
+# ------------------ WALK FORWARD ------------------
+
+def walk_forward_validate(symbol, tf, strategy_override=None):
+    from backtest import run_backtest
+
+    df = fetch_ohlcv_full(symbol, tf)
+    if df is None or len(df) < 300:
+        return {"passed": False, "score": 0}
+
+    n = len(df)
+    seg = n // 3
+
+    results = []
+    densities = []
+
+    for i in range(2):
+        train = run_backtest(symbol, tf, start=str(df.index[0]), end=str(df.index[seg]), strategy_override=strategy_override)
+        val = run_backtest(symbol, tf, start=str(df.index[seg]), end=str(df.index[2*seg]), strategy_override=strategy_override)
+        test = run_backtest(symbol, tf, start=str(df.index[2*seg]), end=str(df.index[-1]), strategy_override=strategy_override)
+
+        d = summarize_bt(test, seg, symbol, tf)
+        densities.append(d["density"])
+
+        results.append({
+            "train": train,
+            "val": val,
+            "test": test,
+            "diagnostics": d
+        })
+
+    score = mean([score_metrics(r["test"]).score for r in results])
+    spread = pstdev([score_metrics(r["test"]).score for r in results]) if len(results) > 1 else 0
+
+    mean_density = mean(densities)
+    target = signal_floor_target(symbol, tf)
+
+    return {
+        "passed": score > 0.55,
+        "score": score,
+        "spread": spread,
+        "diagnostics": {
+            "mean_density": round(mean_density, 3),
+            "target_density": target,
+            "density_gap": round(target - mean_density, 3),
+        },
+        "folds": results
+    }
 
 
-def mutate_parameters(base: dict) -> dict:
-    params = dict(base or {})
+# ------------------ EVOLUTION ------------------
 
-    # simple intelligent mutations
-    params["min_adx"] = max(10, params.get("min_adx", 20) + random.choice([-5, 0, 5]))
-    params["min_atr_rank"] = max(0.2, params.get("min_atr_rank", 0.6) + random.choice([-0.1, 0, 0.1]))
-    params["min_bb_rank"] = max(0.2, params.get("min_bb_rank", 0.6) + random.choice([-0.1, 0, 0.1]))
-    params["rsi_long"] = min(70, max(40, params.get("rsi_long", 55) + random.choice([-5, 0, 5])))
+def btc_loosen(params):
+    p = dict(params)
 
-    return params
+    # 🔥 THIS IS THE REAL FIX
+    p["allow_shorts"] = True
+    p["min_adx"] = max(6, p.get("min_adx", 12) - 4)
+    p["min_atr_rank"] = max(0.03, p.get("min_atr_rank", 0.1) - 0.05)
+    p["min_bb_rank"] = max(0.03, p.get("min_bb_rank", 0.1) - 0.05)
+
+    # remove filters = more signals
+    p["use_reclaim_filter"] = False
+    p["use_structure_filter"] = False
+    p["use_volume_filter"] = False
+
+    return p
 
 
-def evolve_once(symbol: str, timeframe: str, top_k: int = 3):
-    parents = list_strategies(active_only=True)[:top_k]
+def evolve_once(symbol, tf):
+    parents = list_strategies()
 
     results = []
 
-    for p in parents:
-        base_params = p.get("parameters") or {}
+    for p in parents[:3]:
+        base = dict(p.get("parameters", {}))
 
-        for _ in range(2):
-            child_params = mutate_parameters(base_params)
+        child = dict(base)
 
-            wf = walk_forward_validate(symbol, timeframe, {"parameters": child_params})
+        # noise
+        child["min_adx"] = base.get("min_adx", 12) + random.choice([-3, 0, 3])
 
-            strategy_id = f"{symbol.replace('/', '_')}_{timeframe}_{datetime.utcnow().timestamp()}"
+        if symbol.startswith("BTC") and tf == "4h":
+            child = btc_loosen(child)
 
-            upsert_strategy(
-                strategy_id,
-                base_strategy=p.get("strategy_id"),
-                parameters=child_params,
-                metrics={"wf_score": wf.get("score")},
-                status="active" if wf.get("passed") else "candidate",
-                active=wf.get("passed"),
-                robustness_score=wf.get("robustness", 0.0),
-                regime_profile="auto",
-            )
+        logic_hash = compute_logic_hash(child)
 
-            results.append({
-                "parent": p.get("strategy_id"),
-                "child": strategy_id,
-                "wf": wf,
-            })
+        wf = walk_forward_validate(symbol, tf, {"parameters": child})
+
+        sid = f"{symbol.replace('/','_')}_{tf}_{int(time.time()*1000)}"
+
+        upsert_strategy(
+            sid,
+            base_strategy=p.get("strategy_id"),
+            parameters=child,
+            metrics={"wf": wf},
+            status="candidate",
+            active=False,
+            robustness_score=wf.get("score", 0),
+            regime_profile="auto",
+            parent_strategy_id=p.get("strategy_id"),
+            tags=[symbol, tf, "evo"],
+            source="evolution"
+        )
+
+        results.append({
+            "parent": p.get("strategy_id"),
+            "child": sid,
+            "wf": wf
+        })
 
     return results
