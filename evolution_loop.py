@@ -27,13 +27,45 @@ def _safe_float(v: Any, d: float = 0.0) -> float:
         return d
 
 
+def _score_row(r: dict[str, Any]) -> float:
+    return float(((r.get("metrics") or {}).get("walk_forward") or {}).get("score", 0.0))
+
+
 def _pick_parent(symbol, timeframe):
+    s = symbol.lower()
+    t = timeframe.lower()
+
+    # 1. Try active first
     rows = list_strategies(active_only=True)
-    s = symbol.lower(); t = timeframe.lower()
-    matches = [r for r in rows if s in {str(x).lower() for x in (r.get("tags") or [])} and t in {str(x).lower() for x in (r.get("tags") or [])}]
-    if not matches:
-        return None
-    return sorted(matches, key=lambda r: _safe_float(((r.get("metrics") or {}).get("walk_forward") or {}).get("score", 0.0)), reverse=True)[0]
+    matches = [
+        r for r in rows
+        if s in {str(x).lower() for x in (r.get("tags") or [])}
+        and t in {str(x).lower() for x in (r.get("tags") or [])}
+    ]
+    if matches:
+        return sorted(matches, key=_score_row, reverse=True)[0]
+
+    # 2. Fallback: BEST REJECTED
+    rows = list_strategies(active_only=False)
+    matches = [
+        r for r in rows
+        if s in {str(x).lower() for x in (r.get("tags") or [])}
+        and t in {str(x).lower() for x in (r.get("tags") or [])}
+        and r.get("status") != "running"
+    ]
+
+    if matches:
+        return sorted(
+            matches,
+            key=lambda r: (
+                _score_row(r),
+                float((r.get("metrics") or {}).get("profit_factor", 0)),
+                float(r.get("robustness_score", 0)),
+            ),
+            reverse=True,
+        )[0]
+
+    return None
 
 
 def _feedback_from_metrics(metrics: dict[str, Any]) -> dict[str, Any]:
@@ -93,7 +125,16 @@ def evolve_once(symbols, timeframes, children_per_parent=4, max_bars=0, allow_sh
             parent = _pick_parent(symbol, timeframe)
             parent_feedback = _feedback_from_metrics((parent or {}).get("metrics") or {})
 
-            children = [seed_strategy(symbol, timeframe, family=family)] if parent is None else mutate_parent(parent, symbol=symbol, timeframe=timeframe, n_children=children_per_parent, seed=seed, feedback=parent_feedback)
+            if parent is None:
+                children = mutate_parent(
+                    None,
+                    symbol=symbol,
+                    timeframe=timeframe,
+                    n_children=children_per_parent,
+                    feedback={"mean_test_trades": 0, "top_fail_reasons": {"no_trades": 1}},
+                )
+            else:
+                children = mutate_parent(parent, symbol=symbol, timeframe=timeframe, n_children=children_per_parent, seed=seed, feedback=parent_feedback)
 
             wf_folds = build_walk_forward_folds(start, end, folds=folds, train_ratio=train_ratio, val_ratio=val_ratio, test_ratio=test_ratio)
 
