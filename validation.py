@@ -6,7 +6,7 @@ from the orchestration layer so the evolution loop stays readable.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
 from typing import Any
 
 import numpy as np
@@ -125,6 +125,20 @@ def _trade_density_score(trades: int, timeframe: str, split_name: str) -> float:
     return min(1.0, max(0.0, trades / float(target)))
 
 
+def _decision_to_dict(decision: Any) -> dict[str, Any]:
+    if isinstance(decision, dict):
+        return decision
+    try:
+        return asdict(decision)
+    except Exception:
+        pass
+    payload: dict[str, Any] = {}
+    for key in ("score", "passed", "reasons"):
+        if hasattr(decision, key):
+            payload[key] = getattr(decision, key)
+    return payload
+
+
 def summarize_walk_forward_reports(
     fold_reports: list[dict[str, Any]],
     *,
@@ -154,16 +168,14 @@ def summarize_walk_forward_reports(
 
             decision = score_metrics(result)
             split_scores[split_name].append(decision.score)
-            split_decisions[split_name].append(decision.as_dict())
+            split_decisions[split_name].append(_decision_to_dict(decision))
 
             trades = int(result.get("trades", 0) or 0)
             density = _trade_density_score(trades, timeframe, split_name)
             density_scores[split_name].append(density)
 
             if density < SOFT_DENSITY_FLOOR:
-                reasons.append(
-                    f"{fold.get('label', 'fold')}:{split_name}:density<{SOFT_DENSITY_FLOOR:.2f}"
-                )
+                reasons.append(f"{fold.get('label', 'fold')}:{split_name}:density<{SOFT_DENSITY_FLOOR:.2f}")
 
             if not decision.passed:
                 reasons.extend([f"{fold.get('label', 'fold')}:{split_name}:{reason}" for reason in decision.reasons])
