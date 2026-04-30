@@ -28,8 +28,27 @@ def _safe_float(v: Any, d: float = 0.0) -> float:
         return d
 
 
+def _split_mean(wf: dict[str, Any], split_name: str, key: str) -> float:
+    split_results = wf.get("split_results") or {}
+    rows = split_results.get(split_name) or []
+    vals = []
+    for row in rows:
+        if isinstance(row, dict) and row.get(key) is not None:
+            vals.append(_safe_float(row.get(key), 0.0))
+    return sum(vals) / len(vals) if vals else 0.0
+
+
 def _score_row(r: dict[str, Any]) -> float:
-    return float(((r.get("metrics") or {}).get("walk_forward") or {}).get("score", 0.0))
+    wf = (r.get("metrics") or {}).get("walk_forward") or {}
+    score = _safe_float(wf.get("score", 0.0), 0.0)
+    pf = _split_mean(wf, "test", "profit_factor")
+    wr = _split_mean(wf, "test", "win_rate")
+    trades = _split_mean(wf, "test", "trades")
+    spread = _safe_float(wf.get("score_spread", 0.0), 0.0)
+    # Slightly reward stability and real activity while down-weighting extreme
+    # low-sample PF spikes that can otherwise dominate parent selection.
+    bonus = 0.06 * min(pf, 2.0) + 0.04 * wr + 0.02 * min(trades / 20.0, 1.0) - 0.05 * min(spread, 0.5)
+    return score + bonus
 
 
 def _pick_parent(symbol, timeframe):
@@ -54,15 +73,7 @@ def _pick_parent(symbol, timeframe):
     ]
 
     if matches:
-        return sorted(
-            matches,
-            key=lambda r: (
-                _score_row(r),
-                float((r.get("metrics") or {}).get("profit_factor", 0)),
-                float(r.get("robustness_score", 0)),
-            ),
-            reverse=True,
-        )[0]
+        return sorted(matches, key=_score_row, reverse=True)[0]
 
     return None
 
@@ -80,6 +91,12 @@ def _feedback_from_metrics(metrics: dict[str, Any]) -> dict[str, Any]:
         "mean_test_trades": _safe_float((activity.get("mean") or {}).get("test", 0), 0.0),
         "mean_val_trades": _safe_float((activity.get("mean") or {}).get("val", 0), 0.0),
         "mean_train_trades": _safe_float((activity.get("mean") or {}).get("train", 0), 0.0),
+        "mean_test_pf": _safe_float((activity.get("mean_pf") or {}).get("test", 0), 0.0),
+        "mean_val_pf": _safe_float((activity.get("mean_pf") or {}).get("val", 0), 0.0),
+        "mean_train_pf": _safe_float((activity.get("mean_pf") or {}).get("train", 0), 0.0),
+        "mean_test_wr": _safe_float((activity.get("mean_wr") or {}).get("test", 0), 0.0),
+        "mean_val_wr": _safe_float((activity.get("mean_wr") or {}).get("val", 0), 0.0),
+        "mean_train_wr": _safe_float((activity.get("mean_wr") or {}).get("train", 0), 0.0),
         "score": _safe_float(wf.get("score", 0.0), 0.0),
         "score_spread": _safe_float(wf.get("score_spread", 0.0), 0.0),
         "train_mean_score": _safe_float(means.get("train", 0.0), 0.0),
