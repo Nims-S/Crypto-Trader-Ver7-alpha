@@ -15,21 +15,39 @@ class StrategyCandidate:
     notes: str = ""
 
 
-def enforce_min_activity(params, feedback):
-    mean_test = feedback.get("mean_test_trades", 0)
+def _safe_float(value, default=0.0):
+    try:
+        return float(value)
+    except Exception:
+        return default
 
-    if mean_test < 5:
-        params["min_bb_rank"] = max(0.01, params.get("min_bb_rank", 0.1) * 0.5)
-        params["min_atr_rank"] = max(0.01, params.get("min_atr_rank", 0.1) * 0.5)
-        params["min_adx"] = max(5, params.get("min_adx", 10) - 5)
+
+def enforce_min_activity(params, feedback):
+    mean_train = _safe_float((feedback or {}).get("mean_train_trades", 0), 0.0)
+    mean_val = _safe_float((feedback or {}).get("mean_val_trades", 0), 0.0)
+    mean_test = _safe_float((feedback or {}).get("mean_test_trades", 0), 0.0)
+    score_spread = _safe_float((feedback or {}).get("score_spread", 0), 0.0)
+
+    # If any split starves, loosen aggressively.
+    if min(mean_train, mean_val, mean_test) < 5 or score_spread > 0.25:
+        params["min_bb_rank"] = max(0.01, _safe_float(params.get("min_bb_rank", 0.1), 0.1) * 0.5)
+        params["min_atr_rank"] = max(0.01, _safe_float(params.get("min_atr_rank", 0.1), 0.1) * 0.5)
+        params["min_adx"] = max(5.0, _safe_float(params.get("min_adx", 10), 10) - 5.0)
 
         params["use_structure_filter"] = False
         params["use_reclaim_filter"] = False
         params["use_volume_filter"] = False
 
         # RSI loosening
-        params["rsi_long"] = max(45, params.get("rsi_long", 55) - 5)
-        params["rsi_short"] = min(55, params.get("rsi_short", 45) + 5)
+        params["rsi_long"] = max(45, _safe_float(params.get("rsi_long", 55), 55) - 5)
+        params["rsi_short"] = min(55, _safe_float(params.get("rsi_short", 45), 45) + 5)
+
+    # If train is active but val/test are starving, keep HTF more open and favor
+    # entries that can survive across splits.
+    if mean_train >= 5 and min(mean_val, mean_test) < 5:
+        params["use_htf_filter"] = False
+        if random.random() < 0.5:
+            params["entry_mode"] = random.choice(["breakout", "mean_reversion"])
 
     return params
 
@@ -52,6 +70,13 @@ def mutate_parent(parent, symbol, timeframe, n_children=4, seed=None, feedback=N
 
         if random.random() < 0.3:
             params["entry_mode"] = random.choice(["breakout", "mean_reversion"])
+
+        # If the feedback indicates a large gap between folds, bias toward
+        # looser, more adaptable structures.
+        if _safe_float((feedback or {}).get("score_spread", 0), 0.0) > 0.25:
+            params["use_structure_filter"] = False
+            if random.random() < 0.5:
+                params["use_reclaim_filter"] = False
 
         child = StrategyCandidate(
             strategy_id=f"evo_{symbol.replace('/','_').lower()}_{timeframe}_{random.randint(1,999999)}",
