@@ -1,6 +1,6 @@
 import random
 from dataclasses import dataclass
-from typing import Dict, Any
+from typing import Any, Dict
 
 @dataclass
 class StrategyCandidate:
@@ -15,117 +15,107 @@ class StrategyCandidate:
     notes: str = ""
 
 
-def _safe_float(value, default=0.0):
+def _safe_float(v, default=0.0):
     try:
-        return float(value)
+        return float(v)
     except Exception:
         return default
 
 
-def enforce_min_activity(params, feedback):
-    mean_train = _safe_float((feedback or {}).get("mean_train_trades", 0), 0.0)
-    mean_val = _safe_float((feedback or {}).get("mean_val_trades", 0), 0.0)
-    mean_test = _safe_float((feedback or {}).get("mean_test_trades", 0), 0.0)
-    score_spread = _safe_float((feedback or {}).get("score_spread", 0), 0.0)
+def _clamp(v, lo, hi):
+    return max(lo, min(hi, v))
 
-    # Hard anti-starvation (fold-aware)
-    if min(mean_train, mean_val, mean_test) < 5 or score_spread > 0.25:
+
+def enforce_min_activity(params, feedback):
+    tr = _safe_float((feedback or {}).get("mean_train_trades", 0), 0.0)
+    va = _safe_float((feedback or {}).get("mean_val_trades", 0), 0.0)
+    te = _safe_float((feedback or {}).get("mean_test_trades", 0), 0.0)
+    sp = _safe_float((feedback or {}).get("score_spread", 0), 0.0)
+    if min(tr, va, te) < 5 or sp > 0.25:
         params["min_bb_rank"] = max(0.01, _safe_float(params.get("min_bb_rank", 0.1), 0.1) * 0.5)
         params["min_atr_rank"] = max(0.01, _safe_float(params.get("min_atr_rank", 0.1), 0.1) * 0.5)
         params["min_adx"] = max(5.0, _safe_float(params.get("min_adx", 10), 10) - 5.0)
-
         params["use_structure_filter"] = False
         params["use_reclaim_filter"] = False
         params["use_volume_filter"] = False
-
-        # RSI loosening
         params["rsi_long"] = max(45, _safe_float(params.get("rsi_long", 55), 55) - 5)
         params["rsi_short"] = min(55, _safe_float(params.get("rsi_short", 45), 45) + 5)
-
-    # Train ok but val/test dead → remove HTF rigidity
-    if mean_train >= 5 and min(mean_val, mean_test) < 5:
+    if tr >= 5 and min(va, te) < 5:
         params["use_htf_filter"] = False
         if random.random() < 0.5:
             params["entry_mode"] = random.choice(["breakout", "mean_reversion"])
-
     return params
 
 
 def _apply_profit_repair(params, feedback, symbol):
-    mean_pf = _safe_float((feedback or {}).get("mean_test_pf", 0), 0.0)
-    mean_wr = _safe_float((feedback or {}).get("mean_test_wr", 0), 0.0)
-    mean_trades = _safe_float((feedback or {}).get("mean_test_trades", 0), 0.0)
-
-    # If we have enough trades but poor PF → switch toward trend/breakout structure
-    if mean_trades >= 15 and mean_pf < 1.1:
-        if mean_wr >= 0.45:
-            # let winners run: trend / breakout bias
+    pf = _safe_float((feedback or {}).get("mean_test_pf", 0), 0.0)
+    wr = _safe_float((feedback or {}).get("mean_test_wr", 0), 0.0)
+    tr = _safe_float((feedback or {}).get("mean_test_trades", 0), 0.0)
+    sp = _safe_float((feedback or {}).get("score_spread", 0), 0.0)
+    if tr >= 15 and pf < 1.1:
+        if wr >= 0.45:
             params["entry_mode"] = random.choice(["breakout", "trend_pullback"])
             params["use_breakout_filter"] = True
             params["use_trend_filter"] = True
             params["use_structure_filter"] = True
             params["use_volume_filter"] = True
-            # HTF helps stability for BTC and higher TFs
+            params["tp1_close_fraction"] = 0.20
+            params["tp2_close_fraction"] = 0.30
+            params["tp3_close_fraction"] = 0.25
+            params["be_trigger_rr"] = 2.0
+            params["trail_atr_mult"] = 1.15 if symbol.startswith("BTC") else 1.30
+            params["trail_ema20"] = bool(symbol.startswith("BTC"))
+            params["max_bars_override"] = 24 if symbol.startswith("BTC") else 18
             if symbol.startswith("BTC"):
                 params["use_htf_filter"] = True
         else:
-            # edge is weak → loosen again but diversify
             params["entry_mode"] = random.choice(["mean_reversion", "breakout"])
             params["use_structure_filter"] = False
             params["use_volume_filter"] = False
-
+            params["tp1_close_fraction"] = 0.30
+            params["tp2_close_fraction"] = 0.35
+            params["tp3_close_fraction"] = 0.15
+            params["be_trigger_rr"] = 1.2
+            params["trail_atr_mult"] = 1.45
+            params["trail_ema20"] = False
+            params["max_bars_override"] = 16
+    if tr >= 15 and sp > 0.25:
+        params["use_structure_filter"] = True
+        params["use_volume_filter"] = True
+        params["be_trigger_rr"] = max(_safe_float(params.get("be_trigger_rr", 1.6), 1.6), 1.8)
+        params["trail_atr_mult"] = _clamp(_safe_float(params.get("trail_atr_mult", 1.4), 1.4), 1.1, 2.0)
     return params
 
 
 def mutate_parent(parent, symbol, timeframe, n_children=4, seed=None, feedback=None):
     random.seed(seed)
+    base_params = dict((parent or {}).get("parameters") or {})
     children = []
-
-    base_params = parent.get("parameters") if parent else {}
-
-    for _ in range(n_children):
+    for _ in range(max(1, n_children)):
         params = dict(base_params)
-
         if feedback:
             params = enforce_min_activity(params, feedback)
             params = _apply_profit_repair(params, feedback, symbol)
-
-        # Diversity injection (critical for exploration)
         if random.random() < 0.3:
             params["use_htf_filter"] = False
-
         if random.random() < 0.3:
             params["entry_mode"] = random.choice(["breakout", "mean_reversion"])
-
-        # Penalize unstable configs (high variance across folds)
         if _safe_float((feedback or {}).get("score_spread", 0), 0.0) > 0.25:
             params["use_structure_filter"] = False
             if random.random() < 0.5:
                 params["use_reclaim_filter"] = False
-
-        child = StrategyCandidate(
-            strategy_id=f"evo_{symbol.replace('/','_').lower()}_{timeframe}_{random.randint(1,999999)}",
-            base_strategy=parent.get("strategy_id") if parent else "seed",
-            version=(parent.get("version", 0) + 1) if parent else 1,
-            parameters=params,
-            symbol=symbol,
-            timeframe=timeframe,
-            tags=[symbol, timeframe, "evo"],
-            source="evolution",
-        )
-        children.append(child)
-
+        if random.random() < 0.35:
+            params["tp1_close_fraction"] = _clamp(_safe_float(params.get("tp1_close_fraction", 0.25), 0.25) + random.uniform(-0.05, 0.05), 0.10, 0.40)
+        if random.random() < 0.35:
+            params["tp2_close_fraction"] = _clamp(_safe_float(params.get("tp2_close_fraction", 0.35), 0.35) + random.uniform(-0.08, 0.08), 0.20, 0.55)
+        if random.random() < 0.35:
+            params["trail_atr_mult"] = _clamp(_safe_float(params.get("trail_atr_mult", 1.4), 1.4) + random.uniform(-0.15, 0.15), 1.0, 2.0)
+        if random.random() < 0.25:
+            params["be_trigger_rr"] = _clamp(_safe_float(params.get("be_trigger_rr", 1.6), 1.6) + random.uniform(-0.3, 0.4), 0.8, 3.0)
+        sid = f"evo_{symbol.replace('/','_').lower()}_{timeframe}_{random.randint(1,999999)}"
+        children.append(StrategyCandidate(sid, str((parent or {}).get("strategy_id") or "seed"), int((parent or {}).get("version", 0) or 0) + 1, params, symbol, timeframe, [symbol, timeframe, "evo"], "evolution"))
     return children
 
 
 def seed_strategy(symbol, timeframe, family="evo"):
-    return StrategyCandidate(
-        strategy_id=f"{family}_{symbol.replace('/','_').lower()}_{timeframe}_{random.randint(1,999999)}",
-        base_strategy="seed",
-        version=1,
-        parameters={},
-        symbol=symbol,
-        timeframe=timeframe,
-        tags=[symbol, timeframe, family],
-        source="seed",
-    )
+    return StrategyCandidate(f"{family}_{symbol.replace('/','_').lower()}_{timeframe}_{random.randint(1,999999)}", "seed", 1, {}, symbol, timeframe, [symbol, timeframe, family], "seed")
