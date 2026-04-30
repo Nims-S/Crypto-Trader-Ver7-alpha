@@ -1,17 +1,9 @@
 """Strategy mutation helpers for the automated evolution loop.
 
-The mutation space now explores structural archetypes in addition to entry
-thresholds. Safe mutation targets include:
-- entry model: mean reversion / trend pullback / breakout
-- regime flags: use HTF filter, use volume filter, use reclaim filter
-- state thresholds: ADX / ATR rank / BB rank / RSI bands
-- directionality: long-only vs optional shorts
-
-This version adds feedback-aware mutation: the engine reads parent diagnostics
-and automatically biases future children toward higher trade density or tighter
-filters depending on the observed failure mode.
-
-Stop logic, exit logic, and position sizing remain outside the mutation space.
+This module keeps the mutation space bounded, but feedback-aware. The engine
+can loosen filters aggressively when trade density is too low, or tighten them
+when failure modes indicate noise / risk. It also injects light random structural
+variation so the search does not collapse into the same seed shape.
 """
 
 from __future__ import annotations
@@ -23,11 +15,10 @@ import random
 from dataclasses import dataclass
 from typing import Any
 
-
 PARAM_BOUNDS = {
     "min_adx": (4.0, 28.0),
-    "min_atr_rank": (0.0, 0.35),
-    "min_bb_rank": (0.0, 0.35),
+    "min_atr_rank": (0.01, 0.35),
+    "min_bb_rank": (0.01, 0.35),
     "rsi_long": (44.0, 66.0),
     "rsi_short": (34.0, 56.0),
 }
@@ -218,11 +209,7 @@ def _normalize_reason_counts(feedback: dict[str, Any] | None) -> dict[str, int]:
 
 
 def derive_feedback_profile(parent: dict[str, Any] | None, feedback: dict[str, Any] | None = None) -> dict[str, Any]:
-    """Translate diagnostics / rejection reasons into an exploration profile.
-
-    The profile is intentionally small and bounded so we can steer the mutation
-    space without collapsing it into a single hard-coded strategy.
-    """
+    """Translate diagnostics / rejection reasons into an exploration profile."""
     profile: dict[str, Any] = {
         "mode": "balanced",
         "force_loose": False,
@@ -242,22 +229,23 @@ def derive_feedback_profile(parent: dict[str, Any] | None, feedback: dict[str, A
         "target_use_trend_filter": None,
         "target_use_breakout_filter": None,
         "target_allow_shorts": None,
+        "mean_test_trades": _safe_float((feedback or {}).get("mean_test_trades", 0), 0.0),
     }
 
     counts = _normalize_reason_counts(feedback)
-    density = {}
-    try:
-        density = (feedback or {}).get("trade_activity") or {}
-    except Exception:
-        density = {}
+    activity = (feedback or {}).get("trade_activity") or {}
+    if profile["mean_test_trades"] <= 0 and isinstance(activity, dict):
+        mean_bucket = activity.get("mean") or {}
+        if isinstance(mean_bucket, dict):
+            profile["mean_test_trades"] = _safe_float(mean_bucket.get("test", 0), 0.0)
 
     zero_folds = 0
-    mean_density = None
-    if isinstance(density, dict):
-        mean_density = ((density.get("mean") or {}) if isinstance(density.get("mean"), dict) else {}).get("test")
-        zero_folds = _safe_float(((density.get("zero_folds") or {}) if isinstance(density.get("zero_folds"), dict) else {}).get("test", 0), 0)
+    if isinstance(activity, dict):
+        zero_bucket = activity.get("zero_folds") or {}
+        if isinstance(zero_bucket, dict):
+            zero_folds = int(zero_bucket.get("test", 0) or 0)
 
-    if any(k in counts for k in SPARSE_REASONS) or (mean_density is not None and _safe_float(mean_density, 0.0) < 3.0) or zero_folds >= 1:
+    if any(k in counts for k in SPARSE_REASONS) or profile["mean_test_trades"] < 3 or zero_folds >= 1:
         profile.update(
             {
                 "mode": "high_freq",
@@ -270,7 +258,7 @@ def derive_feedback_profile(parent: dict[str, Any] | None, feedback: dict[str, A
                 "target_min_bb_rank": 0.02,
                 "target_use_htf_filter": False,
                 "target_use_volume_filter": False,
-                "target_use_reclaim_filter": True,
+                "target_use_reclaim_filter": False,
                 "target_use_structure_filter": False,
                 "target_use_trend_filter": False,
                 "target_use_breakout_filter": False,
@@ -307,10 +295,8 @@ def derive_feedback_profile(parent: dict[str, Any] | None, feedback: dict[str, A
             }
         )
 
-    # Symbol-aware defaults: BTC favors trend, alts need more frequency.
     symbol = str((parent or {}).get("symbol") or "").upper()
     if symbol == "BTC/USDT":
-        profile.setdefault("force_trend", True)
         if profile["mode"] != "high_freq":
             profile["mode"] = "trend"
             profile["target_use_htf_filter"] = True
@@ -323,8 +309,19 @@ def derive_feedback_profile(parent: dict[str, Any] | None, feedback: dict[str, A
     return profile
 
 
+def enforce_min_activity(params: dict[str, Any], feedback: dict[str, Any] | None) -> dict[str, Any]:
+    mean_test = _safe_float((feedback or {}).get("mean_test_trades", 0), 0.0)
+    if mean_test < 5:
+        params["min_bb_rank"] = max(0.01, _safe_float(params.get("min_bb_rank", 0.1), 0.1) * 0.5)
+        params["min_atr_rank"] = max(0.01, _safe_float(params.get("min_atr_rank", 0.1), 0.1) * 0.5)
+        params["min_adx"] = max(5.0, _safe_float(params.get("min_adx", 10.0), 10.0) - 5.0)
+        params["use_structure_filter"] = False
+        params["use_reclaim_filter"] = False
+        params["use_volume_filter"] = False
+    return params
+
+
 def _apply_profile(params: dict[str, Any], profile: dict[str, Any], rng: random.Random) -> None:
-    # Core structural steering.
     if profile.get("force_breakout"):
         params["entry_mode"] = "breakout"
     elif profile.get("force_mean_reversion"):
@@ -334,7 +331,6 @@ def _apply_profile(params: dict[str, Any], profile: dict[str, Any], rng: random.
     else:
         params["entry_mode"] = _mutate_choice(rng, params.get("entry_mode", "mean_reversion"), ENTRY_MODE_CHOICES)
 
-    # Gate overrides from feedback.
     for key in (
         "use_htf_filter",
         "use_volume_filter",
@@ -348,7 +344,6 @@ def _apply_profile(params: dict[str, Any], profile: dict[str, Any], rng: random.
         if target is not None:
             params[key] = bool(target)
 
-    # High-frequency exploration pushes filters open when signals are sparse.
     if profile.get("force_loose"):
         params["use_htf_filter"] = False if rng.random() < 0.85 else params.get("use_htf_filter", False)
         params["use_volume_filter"] = False if rng.random() < 0.65 else params.get("use_volume_filter", False)
@@ -357,13 +352,17 @@ def _apply_profile(params: dict[str, Any], profile: dict[str, Any], rng: random.
         params["use_breakout_filter"] = False if rng.random() < 0.70 else params.get("use_breakout_filter", False)
         params["allow_shorts"] = True if rng.random() < 0.55 else params.get("allow_shorts", False)
 
-    # Structural rhythm: each profile still explores some variation.
+    # Critical diversity injection: keep the seed pool from collapsing.
+    if rng.random() < 0.30:
+        params["use_htf_filter"] = False
+    if rng.random() < 0.30:
+        params["entry_mode"] = rng.choice(["breakout", "mean_reversion"])
+
     if rng.random() < 0.35:
         params["use_reclaim_filter"] = not bool(params.get("use_reclaim_filter", True))
     if rng.random() < 0.25:
         params["use_breakout_filter"] = bool(params.get("entry_mode") == "breakout") or bool(params.get("use_breakout_filter", False))
 
-    # Threshold steering.
     if profile.get("loosen_thresholds"):
         params["min_adx"] = _clamp(_safe_float(params.get("min_adx", 10.0), 10.0) - rng.uniform(1.0, 3.0), *PARAM_BOUNDS["min_adx"])
         params["min_atr_rank"] = _clamp(_safe_float(params.get("min_atr_rank", 0.05), 0.05) - rng.uniform(0.00, 0.03), *PARAM_BOUNDS["min_atr_rank"])
@@ -377,11 +376,9 @@ def _apply_profile(params: dict[str, Any], profile: dict[str, Any], rng: random.
         params["min_atr_rank"] = _clamp(_safe_float(params.get("min_atr_rank", 0.08), 0.08) + rng.uniform(-0.02, 0.02), *PARAM_BOUNDS["min_atr_rank"])
         params["min_bb_rank"] = _clamp(_safe_float(params.get("min_bb_rank", 0.08), 0.08) + rng.uniform(-0.02, 0.02), *PARAM_BOUNDS["min_bb_rank"])
 
-    # RSI bands remain bounded.
     params["rsi_long"] = _clamp(_safe_float(params.get("rsi_long", 52.0), 52.0) + rng.uniform(-2.0, 2.0), *PARAM_BOUNDS["rsi_long"])
     params["rsi_short"] = _clamp(_safe_float(params.get("rsi_short", 48.0), 48.0) + rng.uniform(-2.0, 2.0), *PARAM_BOUNDS["rsi_short"])
 
-    # Extra push for high frequency mode.
     if profile.get("mode") == "high_freq":
         params["use_htf_filter"] = False if rng.random() < 0.80 else params["use_htf_filter"]
         params["use_volume_filter"] = False if rng.random() < 0.50 else params["use_volume_filter"]
@@ -406,12 +403,6 @@ def mutate_parent(
     seed: int | None = None,
     feedback: dict[str, Any] | None = None,
 ) -> list[MutationSpec]:
-    """Create a bounded set of variants derived from a registry strategy.
-
-    Feedback from diagnostics or failed validation is used to choose whether the
-    next generation should be more permissive (to recover sparse signals) or more
-    selective (to reduce noisy / risky overtrading).
-    """
     rng = random.Random(seed)
     parent = parent or {}
     base_strategy = str(parent.get("base_strategy") or parent.get("strategy_id") or "seed")
@@ -423,17 +414,15 @@ def mutate_parent(
     for idx in range(max(1, n_children)):
         params = copy.deepcopy(base_params)
 
-        # Pick a profile that intentionally varies frequency and structure.
         if symbol == "BTC/USDT":
             profile_pool = (HIGH_FREQ_PROFILES[1], HIGH_FREQ_PROFILES[2], HIGH_FREQ_PROFILES[3])
         else:
             profile_pool = (HIGH_FREQ_PROFILES[0], HIGH_FREQ_PROFILES[1], HIGH_FREQ_PROFILES[2], HIGH_FREQ_PROFILES[3])
 
         profile = copy.deepcopy(profile_pool[idx % len(profile_pool)])
-        # Blend feedback into the base profile to keep exploration adaptive.
         if feedback_profile.get("mode") == "high_freq":
             profile["name"] = f"{profile['name']}_feedback_loose"
-            profile["entry_mode"] = feedback_profile.get("force_breakout") and "breakout" or profile.get("entry_mode", "mean_reversion")
+            profile["entry_mode"] = "breakout" if feedback_profile.get("force_breakout") else profile.get("entry_mode", "mean_reversion")
         elif feedback_profile.get("mode") == "trend":
             profile["name"] = f"{profile['name']}_feedback_trend"
             profile["entry_mode"] = "trend_pullback"
@@ -445,7 +434,6 @@ def mutate_parent(
 
         _apply_profile(params, profile, rng)
 
-        # Force direct feedback overrides last so they win.
         for key in (
             "target_min_adx",
             "target_min_atr_rank",
@@ -460,10 +448,8 @@ def mutate_parent(
         ):
             target = feedback_profile.get(key)
             if target is not None:
-                param_key = key.replace("target_", "")
-                params[param_key] = target
+                params[key.replace("target_", "")] = target
 
-        # Rotate archetype for extra diversity around the chosen profile.
         if feedback_profile.get("force_breakout"):
             params["entry_mode"] = "breakout"
         elif feedback_profile.get("force_mean_reversion"):
@@ -475,7 +461,6 @@ def mutate_parent(
         else:
             params["entry_mode"] = _mutate_choice(rng, params.get("entry_mode", "mean_reversion"), ENTRY_MODE_CHOICES)
 
-        # Structural filters: feedback can open the gates when signals are sparse.
         if feedback_profile.get("force_loose"):
             params["use_htf_filter"] = False if rng.random() < 0.90 else params.get("use_htf_filter", False)
             params["use_volume_filter"] = False if rng.random() < 0.65 else params.get("use_volume_filter", False)
@@ -497,13 +482,11 @@ def mutate_parent(
             if rng.random() < 0.35:
                 params["use_breakout_filter"] = bool(params.get("use_breakout_filter", False)) or params["entry_mode"] == "breakout"
 
-        # Keep shorts opt-in, but let more children explore them.
         if symbol != "BTC/USDT" and rng.random() < 0.35:
             params["allow_shorts"] = True
         elif symbol == "BTC/USDT":
             params["allow_shorts"] = bool(parent.get("allow_shorts", False)) or rng.random() < 0.20
 
-        # Extra softness for higher-frequency exploration.
         if params["entry_mode"] == "mean_reversion":
             params["min_adx"] = _clamp(params["min_adx"] - rng.uniform(0.0, 3.0), *PARAM_BOUNDS["min_adx"])
             params["use_htf_filter"] = False if rng.random() < 0.70 else params["use_htf_filter"]
@@ -512,12 +495,14 @@ def mutate_parent(
             params["use_breakout_filter"] = True
             params["use_volume_filter"] = True
             params["min_atr_rank"] = _clamp(params["min_atr_rank"] + rng.uniform(0.0, 0.05), *PARAM_BOUNDS["min_atr_rank"])
-        else:  # trend_pullback
+        else:
             params["use_trend_filter"] = True
             params["use_structure_filter"] = True
             params["min_bb_rank"] = _clamp(params["min_bb_rank"] + rng.uniform(0.0, 0.04), *PARAM_BOUNDS["min_bb_rank"])
 
-        # If feedback strongly indicates risk, tighten a bit instead of loosening.
+        # FIX 1 — hard anti-starvation mutation.
+        params = enforce_min_activity(params, feedback_profile)
+
         if feedback_profile.get("tighten_risk_bias"):
             params["use_htf_filter"] = True
             params["use_volume_filter"] = True
@@ -537,7 +522,15 @@ def mutate_parent(
         }
         suffix = _stable_suffix(payload)
         strategy_id = f"{base_strategy}_{symbol.replace('/', '_').lower()}_{timeframe}_{version + 1}_{suffix}"
-        tags = [symbol.lower(), timeframe.lower(), "mutation", base_strategy.lower(), str(params["entry_mode"]).lower(), profile["name"], feedback_profile.get("mode", "balanced")]
+        tags = [
+            symbol.lower(),
+            timeframe.lower(),
+            "mutation",
+            base_strategy.lower(),
+            str(params["entry_mode"]).lower(),
+            profile["name"],
+            feedback_profile.get("mode", "balanced"),
+        ]
         notes = (
             f"mutated_from={parent.get('strategy_id', base_strategy)} "
             f"idx={idx} profile={profile['name']} mode={params['entry_mode']} "
@@ -560,7 +553,6 @@ def mutate_parent(
 
 
 def seed_strategy(symbol: str, timeframe: str, *, family: str = "seed") -> MutationSpec:
-    """Generate a baseline candidate when there is no parent to mutate."""
     params = _base_parameters(None)
     base_strategy = f"{family}_{symbol.replace('/', '_').lower()}"
     payload = {"base_strategy": base_strategy, "symbol": symbol, "timeframe": timeframe, "params": params}
