@@ -26,6 +26,13 @@ class ScoreDecision:
     passed: bool
     reasons: tuple[str, ...]
 
+    def as_dict(self):
+        return {
+            "score": float(self.score),
+            "passed": bool(self.passed),
+            "reasons": list(self.reasons),
+        }
+
 
 def _safe(v, d=0.0):
     try:
@@ -145,13 +152,11 @@ def walk_forward_validate(symbol, tf, strategy_override=None):
 def btc_loosen(params):
     p = dict(params)
 
-    # 🔥 THIS IS THE REAL FIX
     p["allow_shorts"] = True
     p["min_adx"] = max(6, p.get("min_adx", 12) - 4)
     p["min_atr_rank"] = max(0.03, p.get("min_atr_rank", 0.1) - 0.05)
     p["min_bb_rank"] = max(0.03, p.get("min_bb_rank", 0.1) - 0.05)
 
-    # remove filters = more signals
     p["use_reclaim_filter"] = False
     p["use_structure_filter"] = False
     p["use_volume_filter"] = False
@@ -169,7 +174,6 @@ def evolve_once(symbol, tf):
 
         child = dict(base)
 
-        # noise
         child["min_adx"] = base.get("min_adx", 12) + random.choice([-3, 0, 3])
 
         if symbol.startswith("BTC") and tf == "4h":
