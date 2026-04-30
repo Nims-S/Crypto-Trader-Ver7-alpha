@@ -51,6 +51,32 @@ def enforce_min_activity(params, feedback):
     return params
 
 
+def _apply_profit_repair(params, feedback, symbol):
+    mean_pf = _safe_float((feedback or {}).get("mean_test_pf", 0), 0.0)
+    mean_wr = _safe_float((feedback or {}).get("mean_test_wr", 0), 0.0)
+    mean_trades = _safe_float((feedback or {}).get("mean_test_trades", 0), 0.0)
+
+    # If we have enough trades but poor PF → switch toward trend/breakout structure
+    if mean_trades >= 15 and mean_pf < 1.1:
+        if mean_wr >= 0.45:
+            # let winners run: trend / breakout bias
+            params["entry_mode"] = random.choice(["breakout", "trend_pullback"])
+            params["use_breakout_filter"] = True
+            params["use_trend_filter"] = True
+            params["use_structure_filter"] = True
+            params["use_volume_filter"] = True
+            # HTF helps stability for BTC and higher TFs
+            if symbol.startswith("BTC"):
+                params["use_htf_filter"] = True
+        else:
+            # edge is weak → loosen again but diversify
+            params["entry_mode"] = random.choice(["mean_reversion", "breakout"])
+            params["use_structure_filter"] = False
+            params["use_volume_filter"] = False
+
+    return params
+
+
 def mutate_parent(parent, symbol, timeframe, n_children=4, seed=None, feedback=None):
     random.seed(seed)
     children = []
@@ -62,6 +88,7 @@ def mutate_parent(parent, symbol, timeframe, n_children=4, seed=None, feedback=N
 
         if feedback:
             params = enforce_min_activity(params, feedback)
+            params = _apply_profit_repair(params, feedback, symbol)
 
         # Diversity injection (critical for exploration)
         if random.random() < 0.3:
