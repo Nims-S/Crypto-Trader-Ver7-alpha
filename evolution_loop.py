@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import time
 from datetime import datetime, timezone
 from typing import Any
 
@@ -35,7 +36,6 @@ def _pick_parent(symbol, timeframe):
     s = symbol.lower()
     t = timeframe.lower()
 
-    # 1. Try active first
     rows = list_strategies(active_only=True)
     matches = [
         r for r in rows
@@ -45,7 +45,6 @@ def _pick_parent(symbol, timeframe):
     if matches:
         return sorted(matches, key=_score_row, reverse=True)[0]
 
-    # 2. Fallback: BEST REJECTED
     rows = list_strategies(active_only=False)
     matches = [
         r for r in rows
@@ -138,7 +137,6 @@ def evolve_once(symbols, timeframes, children_per_parent=4, max_bars=0, allow_sh
 
             wf_folds = build_walk_forward_folds(start, end, folds=folds, train_ratio=train_ratio, val_ratio=val_ratio, test_ratio=test_ratio)
 
-            # Anti-starvation safety: keep at least one child per symbol/timeframe.
             candidate_rows = []
             for child in children:
                 is_restrictive = _too_restrictive(child.parameters)
@@ -146,7 +144,6 @@ def evolve_once(symbols, timeframes, children_per_parent=4, max_bars=0, allow_sh
                 candidate_rows.append((child, should_skip, is_restrictive))
 
             if candidate_rows and all(skip for _, skip, _ in candidate_rows):
-                # Force the least restrictive child to survive so the generation is never empty.
                 candidate_rows.sort(
                     key=lambda item: (
                         item[2],
@@ -202,13 +199,58 @@ def evolve_once(symbols, timeframes, children_per_parent=4, max_bars=0, allow_sh
     return results
 
 
+def evolve(symbols, timeframes, max_cycles=1, sleep_seconds=0, **kwargs):
+    all_results = []
+    cycles = max(1, int(max_cycles or 1))
+    for cycle_idx in range(cycles):
+        all_results.extend(evolve_once(symbols, timeframes, **kwargs))
+        if cycle_idx < cycles - 1 and sleep_seconds:
+            time.sleep(max(0, int(sleep_seconds)))
+    return all_results
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--symbols", default=",".join(DEFAULT_SYMBOLS))
     parser.add_argument("--timeframes", default=",".join(DEFAULT_TIMEFRAMES))
+    parser.add_argument("--max-cycles", type=int, default=1)
+    parser.add_argument("--sleep-seconds", type=int, default=0)
+    parser.add_argument("--children-per-parent", type=int, default=4)
+    parser.add_argument("--max-bars", type=int, default=0)
+    parser.add_argument("--allow-shorts", action="store_true")
+    parser.add_argument("--start")
+    parser.add_argument("--end")
+    parser.add_argument("--lookback-days", type=int, default=720)
+    parser.add_argument("--folds", type=int, default=3)
+    parser.add_argument("--train-ratio", type=float, default=0.6)
+    parser.add_argument("--val-ratio", type=float, default=0.2)
+    parser.add_argument("--test-ratio", type=float, default=0.2)
+    parser.add_argument("--no-cache", action="store_true")
+    parser.add_argument("--family", default="evo")
+    parser.add_argument("--seed", type=int, default=None)
     args = parser.parse_args()
 
     symbols = [s.strip() for s in args.symbols.split(",") if s.strip()]
     timeframes = [t.strip() for t in args.timeframes.split(",") if t.strip()]
 
-    print(json.dumps({"results": evolve_once(symbols, timeframes)}, indent=2))
+    results = evolve(
+        symbols,
+        timeframes,
+        max_cycles=args.max_cycles,
+        sleep_seconds=args.sleep_seconds,
+        children_per_parent=args.children_per_parent,
+        max_bars=args.max_bars,
+        allow_shorts=args.allow_shorts,
+        start=args.start,
+        end=args.end,
+        lookback_days=args.lookback_days,
+        folds=args.folds,
+        train_ratio=args.train_ratio,
+        val_ratio=args.val_ratio,
+        test_ratio=args.test_ratio,
+        use_cache=not args.no_cache,
+        family=args.family,
+        seed=args.seed,
+    )
+
+    print(json.dumps({"results": results}, indent=2))
