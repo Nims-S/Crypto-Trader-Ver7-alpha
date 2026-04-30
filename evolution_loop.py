@@ -9,6 +9,7 @@ from typing import Any
 from backtest import run_backtest
 from diagnostics import build_candidate_diagnostics
 from db import init_db
+from feedback_engine import build_feedback_summary
 from mutation_engine import mutate_parent, seed_strategy
 from strategy_registry import list_strategies, record_experiment, record_evolution_run, upsert_strategy
 from validation import build_walk_forward_folds, default_evolution_window, summarize_walk_forward_reports
@@ -45,8 +46,6 @@ def _score_row(r: dict[str, Any]) -> float:
     wr = _split_mean(wf, "test", "win_rate")
     trades = _split_mean(wf, "test", "trades")
     spread = _safe_float(wf.get("score_spread", 0.0), 0.0)
-    # Slightly reward stability and real activity while down-weighting extreme
-    # low-sample PF spikes that can otherwise dominate parent selection.
     bonus = 0.06 * min(pf, 2.0) + 0.04 * wr + 0.02 * min(trades / 20.0, 1.0) - 0.05 * min(spread, 0.5)
     return score + bonus
 
@@ -56,21 +55,12 @@ def _pick_parent(symbol, timeframe):
     t = timeframe.lower()
 
     rows = list_strategies(active_only=True)
-    matches = [
-        r for r in rows
-        if s in {str(x).lower() for x in (r.get("tags") or [])}
-        and t in {str(x).lower() for x in (r.get("tags") or [])}
-    ]
+    matches = [r for r in rows if s in {str(x).lower() for x in (r.get("tags") or [])} and t in {str(x).lower() for x in (r.get("tags") or [])}]
     if matches:
         return sorted(matches, key=_score_row, reverse=True)[0]
 
     rows = list_strategies(active_only=False)
-    matches = [
-        r for r in rows
-        if s in {str(x).lower() for x in (r.get("tags") or [])}
-        and t in {str(x).lower() for x in (r.get("tags") or [])}
-        and r.get("status") != "running"
-    ]
+    matches = [r for r in rows if s in {str(x).lower() for x in (r.get("tags") or [])} and t in {str(x).lower() for x in (r.get("tags") or [])} and r.get("status") != "running"]
 
     if matches:
         return sorted(matches, key=_score_row, reverse=True)[0]
@@ -105,18 +95,17 @@ def _feedback_from_metrics(metrics: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _merge_feedback(parent_feedback: dict, store_feedback: dict) -> dict:
+    merged = dict(parent_feedback or {})
+    for key, value in (store_feedback or {}).items():
+        if key not in merged or not merged.get(key):
+            merged[key] = value
+    return merged
+
+
 def _too_restrictive(params: dict[str, Any]) -> bool:
-    flags = [
-        params.get("use_htf_filter", False),
-        params.get("use_volume_filter", False),
-        params.get("use_structure_filter", False),
-        params.get("use_trend_filter", False),
-    ]
-    high_thresholds = (
-        _safe_float(params.get("min_adx", 0), 0) > 10
-        and _safe_float(params.get("min_atr_rank", 0), 0) > 0.08
-        and _safe_float(params.get("min_bb_rank", 0), 0) > 0.08
-    )
+    flags = [params.get("use_htf_filter", False), params.get("use_volume_filter", False), params.get("use_structure_filter", False), params.get("use_trend_filter", False)]
+    high_thresholds = (_safe_float(params.get("min_adx", 0), 0) > 10 and _safe_float(params.get("min_atr_rank", 0), 0) > 0.08 and _safe_float(params.get("min_bb_rank", 0), 0) > 0.08)
     return sum(1 for f in flags if f) >= 3 and high_thresholds
 
 
@@ -140,36 +129,26 @@ def evolve_once(symbols, timeframes, children_per_parent=4, max_bars=0, allow_sh
     for symbol in symbols:
         for timeframe in timeframes:
             parent = _pick_parent(symbol, timeframe)
+
             parent_feedback = _feedback_from_metrics((parent or {}).get("metrics") or {})
+            store_feedback = build_feedback_summary(strategy_id=(parent or {}).get("strategy_id"), symbol=symbol, timeframe=timeframe)
+            combined_feedback = _merge_feedback(parent_feedback, store_feedback)
 
             if parent is None:
-                children = mutate_parent(
-                    None,
-                    symbol=symbol,
-                    timeframe=timeframe,
-                    n_children=children_per_parent,
-                    feedback={"mean_test_trades": 0, "top_fail_reasons": {"no_trades": 1}},
-                )
+                children = mutate_parent(None, symbol=symbol, timeframe=timeframe, n_children=children_per_parent, feedback=combined_feedback)
             else:
-                children = mutate_parent(parent, symbol=symbol, timeframe=timeframe, n_children=children_per_parent, seed=seed, feedback=parent_feedback)
+                children = mutate_parent(parent, symbol=symbol, timeframe=timeframe, n_children=children_per_parent, seed=seed, feedback=combined_feedback)
 
             wf_folds = build_walk_forward_folds(start, end, folds=folds, train_ratio=train_ratio, val_ratio=val_ratio, test_ratio=test_ratio)
 
             candidate_rows = []
             for child in children:
                 is_restrictive = _too_restrictive(child.parameters)
-                should_skip = parent is not None and parent_feedback.get("mean_test_trades", 0) < 3 and is_restrictive
+                should_skip = parent is not None and combined_feedback.get("mean_test_trades", 0) < 3 and is_restrictive
                 candidate_rows.append((child, should_skip, is_restrictive))
 
             if candidate_rows and all(skip for _, skip, _ in candidate_rows):
-                candidate_rows.sort(
-                    key=lambda item: (
-                        item[2],
-                        _safe_float(item[0].parameters.get("min_adx", 0), 0.0),
-                        _safe_float(item[0].parameters.get("min_bb_rank", 0), 0.0),
-                        _safe_float(item[0].parameters.get("min_atr_rank", 0), 0.0),
-                    )
-                )
+                candidate_rows.sort(key=lambda item: (item[2], _safe_float(item[0].parameters.get("min_adx", 0), 0.0), _safe_float(item[0].parameters.get("min_bb_rank", 0), 0.0), _safe_float(item[0].parameters.get("min_atr_rank", 0), 0.0)))
                 candidate_rows[0] = (candidate_rows[0][0], False, candidate_rows[0][2])
 
             for child, should_skip, _ in candidate_rows:
@@ -206,13 +185,7 @@ def evolve_once(symbols, timeframes, children_per_parent=4, max_bars=0, allow_sh
 
                 record_experiment(child.strategy_id, symbol=child.symbol, timeframe=child.timeframe, run_type="walkforward_backtest", parameters=child.parameters, metrics=metrics, passed=passed, notes=f"cycle_id={cycle_id}")
 
-                results.append({
-                    "strategy_id": child.strategy_id,
-                    "symbol": child.symbol,
-                    "timeframe": child.timeframe,
-                    "walk_forward": summary,
-                    "feedback": parent_feedback,
-                })
+                results.append({"strategy_id": child.strategy_id, "symbol": child.symbol, "timeframe": child.timeframe, "walk_forward": summary, "feedback": combined_feedback})
 
     return results
 
@@ -251,24 +224,6 @@ if __name__ == "__main__":
     symbols = [s.strip() for s in args.symbols.split(",") if s.strip()]
     timeframes = [t.strip() for t in args.timeframes.split(",") if t.strip()]
 
-    results = evolve(
-        symbols,
-        timeframes,
-        max_cycles=args.max_cycles,
-        sleep_seconds=args.sleep_seconds,
-        children_per_parent=args.children_per_parent,
-        max_bars=args.max_bars,
-        allow_shorts=args.allow_shorts,
-        start=args.start,
-        end=args.end,
-        lookback_days=args.lookback_days,
-        folds=args.folds,
-        train_ratio=args.train_ratio,
-        val_ratio=args.val_ratio,
-        test_ratio=args.test_ratio,
-        use_cache=not args.no_cache,
-        family=args.family,
-        seed=args.seed,
-    )
+    results = evolve(symbols, timeframes, max_cycles=args.max_cycles, sleep_seconds=args.sleep_seconds, children_per_parent=args.children_per_parent, max_bars=args.max_bars, allow_shorts=args.allow_shorts, start=args.start, end=args.end, lookback_days=args.lookback_days, folds=args.folds, train_ratio=args.train_ratio, val_ratio=args.val_ratio, test_ratio=args.test_ratio, use_cache=not args.no_cache, family=args.family, seed=args.seed)
 
     print(json.dumps({"results": results}, indent=2))
