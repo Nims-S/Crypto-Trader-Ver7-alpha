@@ -21,7 +21,42 @@ from pathlib import Path
 from typing import Any
 
 from strategy_registry import list_strategies, upsert_strategy
+import re
 
+KNOWN_TIMEFRAMES = {"1d","12h","8h","4h","2h","1h","30m","15m"}
+
+def _symbol_from_strategy_id(sid):
+    if not sid:
+        return None
+    s = sid.lower()
+    m = re.search(r"([a-z]+)_usdt", s)
+    if m:
+        return f"{m.group(1).upper()}/USDT"
+    return None
+
+def _timeframe_from_strategy_id(sid):
+    if not sid:
+        return None
+    s = sid.lower()
+    for tf in KNOWN_TIMEFRAMES:
+        if f"_{tf}_" in s:
+            return tf
+    return None
+
+def _has_real_metrics(metrics):
+    score = _safe_float((_load_decision(metrics).get("score", 0)))
+    trades = _latest_trades(metrics)
+    pf = _latest_profit_factor(metrics)
+    wr = _latest_win_rate(metrics)
+    dd = _latest_drawdown(metrics)
+
+    return any([
+        score > 0,
+        trades > 0,
+        pf > 0,
+        wr > 0,
+        dd != 0
+    ])
 
 CATALOG_PATH = Path(os.getenv("ARCHITECTURE_CATALOG_FILE", "architecture_catalog.json"))
 REPORT_PATH = Path(os.getenv("ARCHITECTURE_PROMOTION_REPORT_FILE", "architecture_promotion_report.json"))
@@ -234,12 +269,17 @@ def _eligible(row: dict[str, Any], policy: PromotionPolicy) -> tuple[bool, str, 
     if dd <= policy.max_drawdown_pct:
         return False, f"dd<={policy.max_drawdown_pct:.1f}", metrics
 
-    symbol = _symbol_from_tags(tags)
-    timeframe = _timeframe_from_tags(tags)
-    if not symbol:
-        symbol = row.get("symbol")
-    if not timeframe:
-        timeframe = row.get("timeframe")
+    symbol = (
+        _symbol_from_tags(tags)
+        or _symbol_from_strategy_id(row.get("strategy_id"))
+        or row.get("symbol")
+    )
+
+    timeframe = (
+        _timeframe_from_tags(tags)
+        or _timeframe_from_strategy_id(row.get("strategy_id"))
+        or row.get("timeframe")
+    )
 
     payload = {
         "logic_hash": row.get("logic_hash"),
@@ -279,6 +319,13 @@ def select_promotion_candidates(
         if ok:
             selected.append(payload)
         else:
+        if not policy.require_validated:
+            metrics = row.get("metrics") or {}
+
+            # 🔥 FILTER ZERO-METRIC TRASH
+            if not _has_real_metrics(metrics):
+                continue
+
             row = dict(row)
             row["promotion_reject_reason"] = reason
             selected.append(row)
@@ -407,7 +454,7 @@ if __name__ == "__main__":
     parser.add_argument("--limit", type=int, default=10)
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--mode", choices=["strict", "research"], default="research")
-
+    parser.add_argument("--include-seeds", action="store_true")
     args = parser.parse_args()
 
     policy = STRICT_POLICY if args.mode == "strict" else RESEARCH_POLICY
@@ -419,6 +466,7 @@ if __name__ == "__main__":
         regime=args.regime,
         limit=args.limit,
         dry_run=not args.apply,
+        include_bootstrap_seeds=args.include_seeds,
     )
 
     print(json.dumps(result, indent=2))
