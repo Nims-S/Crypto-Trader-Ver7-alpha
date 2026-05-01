@@ -347,6 +347,11 @@ def select_promotion_candidates(
     winners.sort(key=_rank, reverse=True)
     return winners[: max(1, int(limit))]
 
+def _atomic_write(path: Path, payload: dict[str, Any]) -> None:
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    with tmp.open("w", encoding="utf-8") as fh:
+        json.dump(payload, fh, indent=2, sort_keys=True, default=str)
+    tmp.replace(path)
 
 def promote_winners(
     *,
