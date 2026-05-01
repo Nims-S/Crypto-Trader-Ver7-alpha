@@ -137,7 +137,12 @@ def _latest_metric_score(metrics: dict[str, Any]) -> float:
     decision = _load_decision(metrics)
     return _safe_float(decision.get("score", 0.0), 0.0)
 
-
+def _has_real_metrics(metrics):
+    return (
+        _latest_trades(metrics) > 5 and
+        _latest_profit_factor(metrics) > 0.8
+    )print(json.dumps(rows[0], indent=2))
+exit()
 def _latest_passed(metrics: dict[str, Any]) -> bool:
     decision = _load_decision(metrics)
     return _safe_bool(decision.get("passed", False), False)
@@ -170,57 +175,70 @@ def _timeframe_from_tags(tags: list[str]) -> str | None:
     return None
 
 
-def _latest_trades(metrics: dict[str, Any]) -> int:
+def _latest_trades(metrics):
     wf = metrics.get("walk_forward") or {}
-    split_results = wf.get("split_results") or {}
+    split = wf.get("split_results") or {}
+
     best = 0
-    for split_name in ("train", "val", "test"):
-        rows = split_results.get(split_name) or []
-        for row in rows:
-            best = max(best, _safe_int(row.get("trades", 0), 0))
+    for k in ("train", "val", "test"):
+        for row in split.get(k, []):
+            best = max(best, _safe_int(row.get("trades"), 0))
+
+    # 🔥 fallback
     if best == 0:
-        best = _safe_int(metrics.get("trades", 0), 0)
+        best = _safe_int(metrics.get("trades") or metrics.get("total_trades"), 0)
+
     return best
 
 
-def _latest_profit_factor(metrics: dict[str, Any]) -> float:
+def _latest_profit_factor(metrics):
     wf = metrics.get("walk_forward") or {}
-    split_results = wf.get("split_results") or {}
+    split = wf.get("split_results") or {}
+
     best = 0.0
-    for split_name in ("train", "val", "test"):
-        rows = split_results.get(split_name) or []
-        for row in rows:
-            best = max(best, _safe_float(row.get("profit_factor", 0.0), 0.0))
-    if best == 0.0:
-        best = _safe_float(metrics.get("profit_factor", 0.0), 0.0)
+    for k in ("train", "val", "test"):
+        for row in split.get(k, []):
+            best = max(best, _safe_float(row.get("profit_factor"), 0))
+
+    if best == 0:
+        best = _safe_float(metrics.get("profit_factor") or metrics.get("pf"), 0)
+
     return best
 
 
-def _latest_win_rate(metrics: dict[str, Any]) -> float:
+def _latest_win_rate(metrics):
     wf = metrics.get("walk_forward") or {}
-    split_results = wf.get("split_results") or {}
+    split = wf.get("split_results") or {}
+
     best = 0.0
-    for split_name in ("train", "val", "test"):
-        rows = split_results.get(split_name) or []
-        for row in rows:
-            best = max(best, _safe_float(row.get("win_rate", 0.0), 0.0))
-    if best == 0.0:
-        best = _safe_float(metrics.get("win_rate", 0.0), 0.0)
+    for k in ("train", "val", "test"):
+        for row in split.get(k, []):
+            best = max(best, _safe_float(row.get("win_rate"), 0))
+
+    if best == 0:
+        best = _safe_float(metrics.get("win_rate"), 0)
+
     return best
 
 
-def _latest_drawdown(metrics: dict[str, Any]) -> float:
+def _latest_drawdown(metrics):
     wf = metrics.get("walk_forward") or {}
-    split_results = wf.get("split_results") or {}
+    split = wf.get("split_results") or {}
+
     worst = 0.0
-    for split_name in ("train", "val", "test"):
-        rows = split_results.get(split_name) or []
-        for row in rows:
-            dd = _safe_float(row.get("max_drawdown_pct", 0.0), 0.0)
+    for k in ("train", "val", "test"):
+        for row in split.get(k, []):
+            dd = _safe_float(row.get("max_drawdown_pct"), 0)
             if dd < worst:
                 worst = dd
-    if worst == 0.0:
-        worst = _safe_float(metrics.get("max_drawdown_pct", 0.0), 0.0)
+
+    if worst == 0:
+        worst = _safe_float(
+            metrics.get("max_drawdown_pct") or
+            metrics.get("max_drawdown"),
+            0
+        )
+
     return worst
 
 def _compact_summary(item: PromotionResult) -> dict[str, Any]:
