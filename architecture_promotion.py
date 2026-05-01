@@ -319,7 +319,7 @@ def select_promotion_candidates(
         if ok:
             selected.append(payload)
         else:
-        if not policy.require_validated:
+            if not policy.require_validated:
             metrics = row.get("metrics") or {}
 
             # 🔥 FILTER ZERO-METRIC TRASH
