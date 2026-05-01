@@ -302,6 +302,7 @@ def select_promotion_candidates(
     timeframe: str | None = None,
     regime: str | None = None,
     limit: int = 10,
+    include_bootstrap_seeds: bool = False,
 ) -> list[dict[str, Any]]:
     policy = policy or PromotionPolicy()
     rows = list_strategies(active_only=False)
@@ -315,15 +316,16 @@ def select_promotion_candidates(
             continue
         if regime and str(row.get("regime_profile") or "").lower() != regime.lower():
             continue
+
         ok, reason, payload = _eligible(row, policy)
         if ok:
             selected.append(payload)
-        else:
-            if not policy.require_validated:
+            continue
+
+        if not policy.require_validated:
             metrics = row.get("metrics") or {}
 
-            # 🔥 FILTER ZERO-METRIC TRASH
-            if not _has_real_metrics(metrics):
+            if not include_bootstrap_seeds and not _has_real_metrics(metrics):
                 continue
 
             row = dict(row)
@@ -338,21 +340,12 @@ def select_promotion_candidates(
         return (score, robustness, updated)
 
     if policy.require_validated:
-        # STRICT MODE → only eligible
         winners = [r for r in selected if "promotion_payload" in r]
     else:
-        # RESEARCH MODE → include ALL, even rejected
         winners = selected
 
     winners.sort(key=_rank, reverse=True)
     return winners[: max(1, int(limit))]
-
-
-def _atomic_write(path: Path, payload: dict[str, Any]) -> None:
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    with tmp.open("w", encoding="utf-8") as fh:
-        json.dump(payload, fh, indent=2, sort_keys=True, default=str)
-    tmp.replace(path)
 
 
 def promote_winners(
@@ -363,14 +356,21 @@ def promote_winners(
     regime: str | None = None,
     limit: int = 10,
     dry_run: bool = True,
+    include_bootstrap_seeds: bool = False,
 ) -> dict[str, Any]:
     policy = policy or PromotionPolicy()
-    winners = select_promotion_candidates(policy=policy, symbol=symbol, timeframe=timeframe, regime=regime, limit=limit)
+    winners = select_promotion_candidates(
+        policy=policy,
+        symbol=symbol,
+        timeframe=timeframe,
+        regime=regime,
+        limit=limit,
+        include_bootstrap_seeds=include_bootstrap_seeds,
+    )
 
     promoted: list[PromotionResult] = []
     for row in winners:
         payload = row.get("promotion_payload") or {}
-
         is_strict = _eligible(row, STRICT_POLICY)[0]
 
         promotion_result = PromotionResult(
@@ -390,8 +390,8 @@ def promote_winners(
 
         if not dry_run and is_strict:
             upsert_strategy(
-                strategy_id,
-                base_strategy=row.get("base_strategy") or strategy_id,
+                strategy_id=row.get("strategy_id"),
+                base_strategy=row.get("base_strategy") or row.get("strategy_id") or "unknown",
                 version=int(row.get("version", 1) or 1),
                 status="architecture_promoted",
                 parameters=row.get("parameters") or {},
@@ -455,8 +455,8 @@ if __name__ == "__main__":
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--mode", choices=["strict", "research"], default="research")
     parser.add_argument("--include-seeds", action="store_true")
-    args = parser.parse_args()
 
+    args = parser.parse_args()
     policy = STRICT_POLICY if args.mode == "strict" else RESEARCH_POLICY
 
     result = promote_winners(
